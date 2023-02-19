@@ -1,0 +1,17 @@
+- name: date
+  key: d
+  cmd: date
+  confirm: true
+
+- name: fail
+  key: f
+  cmd: false
+
+- name: vim
+  key: v
+  cmd: nvim
+
+- name: fzf
+  key: f
+  cmd: fzf
+  args: [--preview, "bat {}"]

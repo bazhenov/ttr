@@ -1,4 +1,5 @@
 use crossterm::{
+    cursor::MoveTo,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
     style::Stylize,
@@ -11,9 +12,12 @@ use serde::Deserialize;
 use std::{
     fs::File,
     io::stdout,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::Duration,
 };
+
+const TTR_CONFIG: &str = ".ttr.yaml";
 
 #[derive(Deserialize, Debug)]
 struct Task {
@@ -42,10 +46,8 @@ impl Drop for AlternateScreen {
 }
 
 fn main() {
-    let file = File::open("./tasks.yaml").unwrap();
-    let yaml: Vec<Task> = serde_yaml::from_reader(file).unwrap();
-
-    let Some(task) = select_task(&yaml) else {
+    let config = read_tasks();
+    let Some(task) = select_task(&config) else {
         return
     };
     let exit_status = create_process(task).wait().expect("Process failed");
@@ -65,6 +67,37 @@ fn main() {
             );
         };
         while read_key_code() != KeyCode::Enter {}
+    }
+}
+
+fn read_tasks() -> Vec<Task> {
+    let mut tasks = vec![];
+    if let Some(config) = user_config() {
+        tasks.extend(read_tasks_from_file(config));
+    }
+    if let Some(config) = cwd_config() {
+        tasks.extend(read_tasks_from_file(config));
+    }
+    tasks
+}
+
+fn read_tasks_from_file(path: impl AsRef<Path>) -> Vec<Task> {
+    let file = File::open(path).unwrap();
+    serde_yaml::from_reader(file).unwrap()
+}
+
+fn user_config() -> Option<PathBuf> {
+    dirs::home_dir()
+        .map(|home| home.join(TTR_CONFIG))
+        .filter(|config| config.is_file())
+}
+
+fn cwd_config() -> Option<PathBuf> {
+    let path = PathBuf::from(TTR_CONFIG);
+    if path.is_file() {
+        Some(path)
+    } else {
+        None
     }
 }
 
@@ -103,18 +136,24 @@ fn select_task(tasks: &[Task]) -> Option<&Task> {
 
     let mut error: Option<String> = None;
     loop {
-        execute!(stdout, Clear(ClearType::All)).unwrap();
-        println!("    {}", "SELECT A TASK".stylize().grey());
+        execute!(stdout, Clear(ClearType::All), MoveTo(0, 0)).unwrap();
         println!();
-        for task in tasks {
-            println!(
-                "    <{}>  {:10}",
-                task.key.stylize().green().bold(),
-                task.name.clone().stylize().white().bold()
-            );
+        if !tasks.is_empty() {
+            println!("    {}", "SELECT A TASK".stylize().grey());
+            println!();
+            for task in tasks {
+                println!(
+                    "    {} → {:10}",
+                    task.key.stylize().green().bold(),
+                    task.name.clone().stylize().white()
+                );
+            }
+        } else {
+            println!("    {}", "No tasks configured".stylize().bold());
+            println!("    Create file {} in current directory", TTR_CONFIG);
         }
         println!();
-        println!("    <{}>  {:10}", "q".stylize().red(), "quit");
+        println!("    {} → {:10}", "q".stylize().red(), "quit");
 
         if let Some(e) = error.take() {
             println!("\n   {}\n", e.stylize().red());
