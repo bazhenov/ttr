@@ -28,7 +28,6 @@ struct AlternateScreen;
 
 impl AlternateScreen {
     fn enter() -> Self {
-        enable_raw_mode().unwrap();
         execute!(stdout(), EnterAlternateScreen).unwrap();
         Self
     }
@@ -36,7 +35,6 @@ impl AlternateScreen {
 
 impl Drop for AlternateScreen {
     fn drop(&mut self) {
-        disable_raw_mode().unwrap();
         execute!(stdout(), LeaveAlternateScreen).unwrap();
     }
 }
@@ -46,8 +44,6 @@ fn main() {
     let yaml: Vec<Task> = serde_yaml::from_reader(file).unwrap();
 
     if let Some(task) = select_task(&yaml) {
-        println!("Running task: {}", task.name);
-
         let mut result = Command::new(task.cmd[0].clone())
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -58,18 +54,25 @@ fn main() {
 
         if task.confirmation {
             println!();
-            println!("   Task completed. Press any key to continue");
+            println!("   Task completed. Press Enter to continue");
             println!();
-            loop {
-                if let Ok(true) = event::poll(Duration::from_secs(60)) {
-                    let event = event::read().unwrap();
-                    if let Event::Key(..) = event {
-                        break;
-                    }
-                }
-            }
+            while read_key_code() != KeyCode::Enter {}
         }
     }
+}
+
+fn read_key_code() -> KeyCode {
+    enable_raw_mode().unwrap();
+    let key_code = loop {
+        if let Ok(true) = event::poll(Duration::from_secs(60)) {
+            let event = event::read().unwrap();
+            if let Event::Key(KeyEvent { code, .. }) = event {
+                break code;
+            }
+        }
+    };
+    disable_raw_mode().unwrap();
+    key_code
 }
 
 fn select_task(tasks: &[Task]) -> Option<&Task> {
@@ -80,11 +83,11 @@ fn select_task(tasks: &[Task]) -> Option<&Task> {
     loop {
         execute!(stdout, Clear(ClearType::All)).unwrap();
         for task in tasks {
-            print!("   [{}] {}\r\n", task.key, task.name);
+            println!("   [{}] {}", task.key, task.name);
         }
 
         if let Some(e) = error.take() {
-            let msg = format!("\r\n   {}\r\n", e);
+            let msg = format!("\n   {}\n", e);
             execute!(
                 stdout,
                 SetForegroundColor(Color::Red),
@@ -94,22 +97,17 @@ fn select_task(tasks: &[Task]) -> Option<&Task> {
             .unwrap();
         }
 
-        if let Ok(true) = event::poll(Duration::from_secs(60)) {
-            let event = event::read().unwrap();
-            if let Event::Key(KeyEvent { code, .. }) = event {
-                match code {
-                    KeyCode::Char('q') => return None,
-                    KeyCode::Char(ch) => {
-                        for task in tasks {
-                            if ch == task.key {
-                                return Some(task);
-                            }
-                        }
-                        error = Some(format!("No task for key: {}", ch));
+        match read_key_code() {
+            KeyCode::Char('q') => return None,
+            KeyCode::Char(ch) => {
+                for task in tasks {
+                    if ch == task.key {
+                        return Some(task);
                     }
-                    _ => {}
                 }
+                error = Some(format!("No task for key: {}", ch));
             }
+            _ => {}
         }
     }
 }
