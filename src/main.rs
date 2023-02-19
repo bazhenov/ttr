@@ -23,7 +23,7 @@ struct Task {
     #[serde(default)]
     args: Vec<String>,
     #[serde(default)]
-    confirmation: bool,
+    confirm: bool,
 }
 
 struct AlternateScreen;
@@ -48,12 +48,22 @@ fn main() {
     let Some(task) = select_task(&yaml) else {
         return
     };
-    create_process(task).wait().expect("Process failed");
+    let exit_status = create_process(task).wait().expect("Process failed");
 
-    if task.confirmation {
+    if task.confirm || !exit_status.success() {
         println!();
-        println!("   Task completed. Press Enter to continue");
-        println!();
+        if exit_status.success() {
+            println!(
+                "   Task {}. Press <Enter> to continue...",
+                "completed".stylize().green().bold(),
+            );
+        } else {
+            println!(
+                "   Task {} ({}). Press <Enter> to continue...",
+                "failed".stylize().red().bold(),
+                exit_status,
+            );
+        };
         while read_key_code() != KeyCode::Enter {}
     }
 }
