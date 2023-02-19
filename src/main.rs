@@ -1,19 +1,19 @@
-use std::{
-    io::stdout,
-    process::{Child, Command, Stdio},
-    time::Duration,
-};
-
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    style::{Color, Print, ResetColor, SetForegroundColor, Stylize},
+    style::Stylize,
     terminal::{
         disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
 };
 use serde::Deserialize;
+use std::{
+    fs::File,
+    io::stdout,
+    process::{Child, Command, Stdio},
+    time::Duration,
+};
 
 #[derive(Deserialize, Debug)]
 struct Task {
@@ -42,7 +42,7 @@ impl Drop for AlternateScreen {
 }
 
 fn main() {
-    let file = std::fs::File::open("./tasks.yaml").unwrap();
+    let file = File::open("./tasks.yaml").unwrap();
     let yaml: Vec<Task> = serde_yaml::from_reader(file).unwrap();
 
     let Some(task) = select_task(&yaml) else {
@@ -113,19 +113,20 @@ fn select_task(tasks: &[Task]) -> Option<&Task> {
         let KeyEvent {
             code, modifiers, ..
         } = read_key_event();
-        match code {
-            KeyCode::Char('q') => return None,
-            KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => return None,
-
-            KeyCode::Char(ch) => {
-                let task = tasks.iter().find(|t| t.key == ch);
-                if task.is_some() {
-                    return task;
-                } else {
-                    error = Some(format!("No task for key: {}", ch));
-                }
-            }
-            _ => {}
-        }
+        let task = match code {
+            KeyCode::Char('q') => Ok(None),
+            KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => Ok(None),
+            KeyCode::Char(' ') => Err("Whitespace is not allowed".to_string()),
+            KeyCode::Char(ch) => tasks
+                .iter()
+                .find(|t| t.key == ch)
+                .map(Some)
+                .ok_or(format!("No task for key: {}", ch)),
+            _ => Err("Please enter character key".to_string()),
+        };
+        match task {
+            Ok(task) => return task,
+            Err(reason) => error = Some(reason),
+        };
     }
 }
