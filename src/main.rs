@@ -19,6 +19,8 @@ use std::{
 
 const TTR_CONFIG: &str = ".ttr.yaml";
 
+type Result<T> = anyhow::Result<T>;
+
 #[derive(Deserialize, Debug)]
 struct Task {
     name: String,
@@ -33,22 +35,23 @@ struct Task {
 struct AlternateScreen;
 
 impl AlternateScreen {
-    fn enter() -> Self {
-        execute!(stdout(), EnterAlternateScreen).unwrap();
-        Self
+    fn enter() -> Result<Self> {
+        execute!(stdout(), EnterAlternateScreen)?;
+        Ok(Self)
     }
 }
 
 impl Drop for AlternateScreen {
     fn drop(&mut self) {
-        execute!(stdout(), LeaveAlternateScreen).unwrap();
+        // No need to unpack Result. We can't do anythere here anyway
+        let _ = execute!(stdout(), LeaveAlternateScreen);
     }
 }
 
-fn main() {
-    let config = read_tasks();
-    let Some(task) = select_task(&config) else {
-        return
+fn main() -> Result<()> {
+    let tasks = read_tasks()?;
+    let Some(task) = select_task(&tasks)? else {
+        return Ok(())
     };
     let exit_status = create_process(task).wait().expect("Process failed");
 
@@ -66,24 +69,26 @@ fn main() {
                 exit_status,
             );
         };
-        while read_key_code() != KeyCode::Enter {}
+        while read_key_code()? != KeyCode::Enter {}
     }
+    Ok(())
 }
 
-fn read_tasks() -> Vec<Task> {
+fn read_tasks() -> Result<Vec<Task>> {
     let mut tasks = vec![];
     if let Some(config) = user_config() {
-        tasks.extend(read_tasks_from_file(config));
+        tasks.extend(read_tasks_from_file(config)?);
     }
     if let Some(config) = cwd_config() {
-        tasks.extend(read_tasks_from_file(config));
+        tasks.extend(read_tasks_from_file(config)?);
     }
-    tasks
+    Ok(tasks)
 }
 
-fn read_tasks_from_file(path: impl AsRef<Path>) -> Vec<Task> {
-    let file = File::open(path).unwrap();
-    serde_yaml::from_reader(file).unwrap()
+fn read_tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<Task>> {
+    let file = File::open(path)?;
+    let tasks = serde_yaml::from_reader(file)?;
+    Ok(tasks)
 }
 
 fn user_config() -> Option<PathBuf> {
@@ -111,32 +116,32 @@ fn create_process(task: &Task) -> Child {
         .expect("Unable to start")
 }
 
-fn read_key_code() -> KeyCode {
-    let KeyEvent { code, .. } = read_key_event();
-    code
+fn read_key_code() -> Result<KeyCode> {
+    let KeyEvent { code, .. } = read_key_event()?;
+    Ok(code)
 }
 
-fn read_key_event() -> KeyEvent {
-    enable_raw_mode().unwrap();
+fn read_key_event() -> Result<KeyEvent> {
+    enable_raw_mode()?;
     let key_code = loop {
         if let Ok(true) = event::poll(Duration::from_secs(60)) {
-            let event = event::read().unwrap();
+            let event = event::read()?;
             if let Event::Key(e) = event {
                 break e;
             }
         }
     };
-    disable_raw_mode().unwrap();
-    key_code
+    disable_raw_mode()?;
+    Ok(key_code)
 }
 
-fn select_task(tasks: &[Task]) -> Option<&Task> {
+fn select_task(tasks: &[Task]) -> Result<Option<&Task>> {
     let _alt = AlternateScreen::enter();
     let mut stdout = stdout().lock();
 
     let mut error: Option<String> = None;
     loop {
-        execute!(stdout, Clear(ClearType::All), MoveTo(0, 0)).unwrap();
+        execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
         println!();
         if !tasks.is_empty() {
             println!("    {}", "SELECT A TASK".stylize().grey());
@@ -161,7 +166,7 @@ fn select_task(tasks: &[Task]) -> Option<&Task> {
 
         let KeyEvent {
             code, modifiers, ..
-        } = read_key_event();
+        } = read_key_event()?;
         let task = match code {
             KeyCode::Char('q') => Ok(None),
             KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => Ok(None),
@@ -174,7 +179,7 @@ fn select_task(tasks: &[Task]) -> Option<&Task> {
             _ => Err("Please enter character key".to_string()),
         };
         match task {
-            Ok(task) => return task,
+            Ok(task) => return Ok(task),
             Err(reason) => error = Some(reason),
         };
     }
