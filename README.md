@@ -4,6 +4,14 @@ The idea behind `ttr` is the same as behind Vim [WhichKey](https://github.com/fo
 
 The main difference is ttr doesn't depend on any editor and works right in the shell.
 
+![](img/example.png)
+
+## Features
+
+* supports project-local as well as global tasks
+* confirmation after exit for non interactive applications
+* simple yaml configuration
+
 ## Configuration
 
 `ttr` looks for a `.ttr.yaml` in a current working directory as well as home directory. Tasks from both files are merged together.
