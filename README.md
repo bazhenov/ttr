@@ -32,7 +32,13 @@ In tmux you can use shortcut to run `ttr` like this:
 bind t new-window sh -c "ttr"
 ```
 
-Now on `<leader>t` ttr will be executed in a new window in the current session.
+Now on `<leader>t` ttr will be executed in a new window in the current session. You also can map a key in a normal mode (no need to press the `<leader>` key first)
+
+```
+bind -n C-Space new-window sh -c "ttr"
+```
+
+this will bind `ttr` to <kbd>Ctrl</kbd>+<kbd>Space</kbd>.
 
 ### iTerm2
 
