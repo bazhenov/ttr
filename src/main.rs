@@ -146,12 +146,21 @@ fn select_task(tasks: &[Task]) -> Result<Option<&Task>> {
         if !tasks.is_empty() {
             println!("    {}", "SELECT A TASK".stylize().grey());
             println!();
-            for task in tasks {
-                println!(
-                    "    {} → {:10}",
-                    task.key.stylize().green().bold(),
-                    task.name.clone().stylize().white()
-                );
+            let (width, _) = crossterm::terminal::size()?;
+            // 4 is 2 character padding from screen edge
+            // 20 is width of one task representation
+            let chunks = (width as usize - 4) / 20;
+            for row in tasks.chunks(chunks) {
+                print!("  ");
+                for task in row {
+                    let name = if task.name.len() > 12 {
+                        format!("{}…", task.name.chars().take(11).collect::<String>())
+                    } else {
+                        task.name.clone()
+                    };
+                    print!("  {} → {:12}  ", task.key.stylize().green().bold(), name);
+                }
+                println!();
             }
         } else {
             println!("    {}", "No tasks configured".stylize().bold());
