@@ -53,7 +53,7 @@ Configuration example:
 Add following code to your `.zshrc`
 
 ```
-bindkey -s '^o' '^E^Uttr^M'
+bindkey -s '^k' '^E^Uttr^M'
 ```
 
 This will bind `ttr` to <kbd>Ctrl</kbd>+<kbd>k</kbd>
@@ -84,4 +84,4 @@ this will bind `ttr` to <kbd>Ctrl</kbd>+<kbd>Space</kbd>.
 
 ### iTerm2
 
-In iTerm yoy can [assign shortcuts](https://stackoverflow.com/questions/67222677/keyboard-shortcut-to-execute-a-shell-command-in-iterm2) to execute `ttr`.
+In iTerm you can [assign shortcuts](https://stackoverflow.com/questions/67222677/keyboard-shortcut-to-execute-a-shell-command-in-iterm2) to execute `ttr`.
