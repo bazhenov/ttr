@@ -12,6 +12,22 @@ The main difference is ttr doesn't depend on any editor and works right in the s
 * confirmation after exit for non interactive applications
 * simple yaml configuration
 
+## Installation
+
+### macOS
+
+```console
+$ brew install bazhenov/tap/ttr
+```
+
+### Building from sources
+
+You need rust toolchain and sources.
+
+```console
+$ cargo install --path=.
+```
+
 ## Configuration
 
 `ttr` looks for a `.ttr.yaml` in a current working directory as well as home directory. Tasks from both files are merged together.
