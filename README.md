@@ -48,6 +48,24 @@ Configuration example:
 
 ## Integration with terminals
 
+### zsh
+
+Add following code to your `.zshrc`
+
+```
+bindkey -s '^o' '^E^Uttr^M'
+```
+
+This will bind `ttr` to <kbd>Ctrl</kbd>+<kbd>k</kbd>
+
+### bash
+
+Analog in bash would be following configuration in  `.bashrc`
+
+```
+bind -x '"\C-K":"ttr"'
+```
+
 ### Tmux
 
 In tmux you can use shortcut to run `ttr` like this:
