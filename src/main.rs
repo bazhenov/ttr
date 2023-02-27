@@ -10,6 +10,7 @@ use crossterm::{
 };
 use serde::Deserialize;
 use std::{
+    collections::HashSet,
     fs::File,
     io::stdout,
     path::{Path, PathBuf},
@@ -49,7 +50,8 @@ impl Drop for AlternateScreen {
 }
 
 fn main() -> Result<()> {
-    let tasks = read_tasks()?;
+    let mut tasks = deduplicate_tasks(read_tasks()?);
+    tasks.sort_by(|a, b| a.name.cmp(&b.name));
     let Some(task) = select_task(&tasks)? else {
         return Ok(())
     };
@@ -74,6 +76,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn deduplicate_tasks(tasks: Vec<Task>) -> Vec<Task> {
+    let mut duplicates = HashSet::new();
+    tasks
+        .into_iter()
+        .filter(|t| duplicates.insert(t.key))
+        .collect::<Vec<_>>()
+}
+
 fn read_tasks() -> Result<Vec<Task>> {
     let mut tasks = vec![];
     if let Some(config) = user_config() {
@@ -87,8 +97,7 @@ fn read_tasks() -> Result<Vec<Task>> {
 
 fn read_tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<Task>> {
     let file = File::open(path)?;
-    let tasks = serde_yaml::from_reader(file)?;
-    Ok(tasks)
+    Ok(serde_yaml::from_reader(file)?)
 }
 
 fn user_config() -> Option<PathBuf> {
