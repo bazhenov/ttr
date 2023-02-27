@@ -147,12 +147,19 @@ fn select_task(tasks: &[Task]) -> Result<Option<&Task>> {
             println!("    {}", "SELECT A TASK".stylize().grey());
             println!();
             let (width, _) = crossterm::terminal::size()?;
-            // 4 is 2 character padding from screen edge
+
+            // 4 characters is a padding from screen edge
             // 20 is width of one task representation
-            let chunks = (width as usize - 4) / 20;
-            for row in tasks.chunks(chunks) {
+            let columns_fit = (width as usize - 4) / 20;
+            let rows = (tasks.len() + columns_fit - 1) / columns_fit;
+
+            let columns = tasks.chunks(rows).collect::<Vec<_>>();
+            for i in 0..rows {
                 print!("  ");
-                for task in row {
+                for column in &columns {
+                    let Some(task) = column.get(i) else {
+                        break;
+                    };
                     let name = if task.name.len() > 12 {
                         format!("{}…", task.name.chars().take(11).collect::<String>())
                     } else {
