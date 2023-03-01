@@ -16,3 +16,7 @@
   key: v
   cmd: nvim
 
+- name: cargo run
+  key: R
+  cmd: cargo
+  args: [run]
