@@ -31,6 +31,8 @@ struct Task {
     args: Vec<String>,
     #[serde(default)]
     confirm: bool,
+    #[serde(default)]
+    clear: bool,
 }
 
 struct AlternateScreen;
@@ -55,24 +57,40 @@ fn main() -> Result<()> {
     let Some(task) = select_task(&tasks)? else {
         return Ok(())
     };
-    let exit_status = create_process(task).wait().expect("Process failed");
 
-    if task.confirm || !exit_status.success() {
+    'task_loop: loop {
+        if task.clear {
+            execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+        }
+        let exit_status = create_process(task).wait().expect("Process failed");
+
+        if exit_status.success() && !task.confirm {
+            break 'task_loop;
+        }
+
         println!();
         if exit_status.success() {
             println!(
-                "   Task {}. Press <Enter> to continue...",
+                "   Task {}. Press <Enter> to continue or <r> to repeat...",
                 "completed".stylize().green().bold(),
             );
         } else {
             println!(
-                "   Task {} ({}). Press <Enter> to continue...",
+                "   Task {} ({}). Press <Enter> to continue or <r> to repeat...",
                 "failed".stylize().red().bold(),
                 exit_status,
             );
         };
-        while read_key_code()? != KeyCode::Enter {}
+
+        'confirmation_loop: loop {
+            match read_key_code()? {
+                KeyCode::Enter | KeyCode::Char('q') => break 'task_loop,
+                KeyCode::Char('r') => continue 'task_loop,
+                _ => continue 'confirmation_loop,
+            };
+        }
     }
+
     Ok(())
 }
 

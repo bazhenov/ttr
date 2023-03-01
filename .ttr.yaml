@@ -2,6 +2,7 @@
   key: d
   cmd: date
   confirm: true
+  clear: true
 
 - name: fzf (intentionally very long task name)
   key: f
@@ -16,3 +17,7 @@
   key: v
   cmd: nvim
 
+- name: cargo run
+  key: R
+  cmd: cargo
+  args: [run]
