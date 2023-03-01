@@ -41,8 +41,7 @@ Configuration example:
 
 - name: test
   key: t
-  cmd: cargo
-  args: [test]
+  cmd: cargo test
   confirm: true # displays confirmation after command exited
   clear: true # clears terminal before running command
 ```

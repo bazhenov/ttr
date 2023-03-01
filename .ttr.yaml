@@ -6,18 +6,12 @@
 
 - name: fzf (intentionally very long task name)
   key: f
-  cmd: fzf
-  args: [--preview, "bat {}"]
+  cmd: fzf --preview "bat {}"
 
 - name: fail
-  key: f
-  cmd: false
+  key: F
+  cmd: 'false'
 
 - name: vim
   key: v
   cmd: nvim
-
-- name: cargo run
-  key: R
-  cmd: cargo
-  args: [run]

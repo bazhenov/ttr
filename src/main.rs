@@ -28,8 +28,6 @@ struct Task {
     key: char,
     cmd: String,
     #[serde(default)]
-    args: Vec<String>,
-    #[serde(default)]
     confirm: bool,
     #[serde(default)]
     clear: bool,
@@ -134,8 +132,9 @@ fn cwd_config() -> Option<PathBuf> {
 }
 
 fn create_process(task: &Task) -> Child {
-    Command::new(task.cmd.clone())
-        .args(task.args.clone())
+    let arg = format!("exec {}", task.cmd);
+    Command::new("sh")
+        .args(["-c", arg.as_str()])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
