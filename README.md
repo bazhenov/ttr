@@ -44,6 +44,7 @@ Configuration example:
   cmd: cargo
   args: [test]
   confirm: true # displays confirmation after command exited
+  clear: true # clears terminal before running command
 ```
 
 ## Integration with terminals

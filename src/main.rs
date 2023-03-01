@@ -31,6 +31,8 @@ struct Task {
     args: Vec<String>,
     #[serde(default)]
     confirm: bool,
+    #[serde(default)]
+    clear: bool,
 }
 
 struct AlternateScreen;
@@ -57,6 +59,9 @@ fn main() -> Result<()> {
     };
 
     'task_loop: loop {
+        if task.clear {
+            execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+        }
         let exit_status = create_process(task).wait().expect("Process failed");
 
         if exit_status.success() && !task.confirm {
@@ -76,6 +81,7 @@ fn main() -> Result<()> {
                 exit_status,
             );
         };
+
         'confirmation_loop: loop {
             match read_key_code()? {
                 KeyCode::Enter | KeyCode::Char('q') => break 'task_loop,

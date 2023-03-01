@@ -2,6 +2,7 @@
   key: d
   cmd: date
   confirm: true
+  clear: true
 
 - name: fzf (intentionally very long task name)
   key: f
