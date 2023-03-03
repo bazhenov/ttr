@@ -15,3 +15,8 @@
 - name: vim
   key: v
   cmd: nvim
+
+- name: not-existent
+  key: n
+  cmd: foobar --hello
+  clear: true
