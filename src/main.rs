@@ -29,6 +29,10 @@ struct Opts {
     /// clear screen before running task
     #[arg(long = "clear")]
     clear: bool,
+
+    /// in loop mode after task completed you can select another task to run
+    #[arg(long = "loop")]
+    loop_mode: bool,
 }
 
 const TTR_CONFIG: &str = ".ttr.yaml";
@@ -66,45 +70,70 @@ fn main() -> Result<()> {
     let opts = Opts::parse();
     let mut tasks = deduplicate_tasks(read_tasks()?);
     tasks.sort_by(|a, b| a.name.cmp(&b.name));
-    let Some(task) = select_task(&tasks)? else {
-        return Ok(())
-    };
 
-    'task_loop: loop {
-        if task.clear || opts.clear {
-            execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-        }
-        let exit_status = create_process(task).wait().expect("Process failed");
-
-        if exit_status.success() && !task.confirm && !opts.confirm {
-            break 'task_loop;
-        }
-
-        println!();
-        let prefix = "   ";
-        if exit_status.success() {
-            println!("{}Task {}.", prefix, "completed".stylize().green().bold(),);
-        } else {
-            println!(
-                "{}Task {} ({}).",
-                prefix,
-                "failed".stylize().red().bold(),
-                exit_status,
-            );
+    let mut status_line: Option<String> = None;
+    'select_loop: loop {
+        let Some(task) = select_task(&tasks, &status_line)? else {
+            return Ok(())
         };
-        println!(
-            "{}Press {} to continue or {}epeat...",
-            prefix,
-            "Enter".stylize().yellow().bold(),
-            "r".stylize().yellow().bold()
-        );
 
-        'confirmation_loop: loop {
-            match read_key_code()? {
-                KeyCode::Enter | KeyCode::Char('q') => break 'task_loop,
-                KeyCode::Char('r') => continue 'task_loop,
-                _ => continue 'confirmation_loop,
+        'task_loop: loop {
+            if task.clear || opts.clear {
+                execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+            }
+            let exit_status = create_process(task).wait().expect("Process failed");
+
+            status_line = if exit_status.success() {
+                Some(format!(
+                    "Task {} {}",
+                    task.name,
+                    "completed".stylize().green(),
+                ))
+            } else {
+                Some(format!(
+                    "Task {} {} ({})",
+                    task.name,
+                    "failed".stylize().red(),
+                    exit_status,
+                ))
             };
+
+            if !exit_status.success() || task.confirm || opts.confirm {
+                println!();
+                let prefix = "   ";
+                if exit_status.success() {
+                    println!("{}Task {}.", prefix, "completed".stylize().green().bold(),);
+                } else {
+                    println!(
+                        "{}Task {} ({}).",
+                        prefix,
+                        "failed".stylize().red().bold(),
+                        exit_status,
+                    );
+                };
+                println!(
+                    "{}Press {} to continue. {}epeat or {}elect another task...",
+                    prefix,
+                    "Enter".stylize().yellow().bold(),
+                    "r".stylize().yellow().bold(),
+                    "s".stylize().yellow().bold(),
+                );
+
+                'confirmation_loop: loop {
+                    match read_key_code()? {
+                        KeyCode::Enter if opts.loop_mode => continue 'select_loop,
+                        KeyCode::Enter | KeyCode::Char('q') | KeyCode::Esc => break 'select_loop,
+                        KeyCode::Char('r') => continue 'task_loop,
+                        KeyCode::Char('s') => continue 'select_loop,
+                        _ => continue 'confirmation_loop,
+                    };
+                }
+            }
+            if opts.loop_mode {
+                continue 'select_loop;
+            } else {
+                break 'select_loop;
+            }
         }
     }
 
@@ -154,9 +183,8 @@ fn cwd_config() -> Option<PathBuf> {
 }
 
 fn create_process(task: &Task) -> Child {
-    let arg = format!("exec {}", task.cmd);
     Command::new("sh")
-        .args(["-c", arg.as_str()])
+        .args(["-c", &format!("exec {}", task.cmd)])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -183,7 +211,7 @@ fn read_key_event() -> Result<KeyEvent> {
     Ok(key_code)
 }
 
-fn select_task(tasks: &[Task]) -> Result<Option<&Task>> {
+fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Option<&'a Task>> {
     let _alt = AlternateScreen::enter();
     let mut stdout = stdout().lock();
 
@@ -191,6 +219,10 @@ fn select_task(tasks: &[Task]) -> Result<Option<&Task>> {
     loop {
         execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
         println!();
+        if let Some(status) = status_line {
+            println!("    {}", status);
+            println!();
+        }
         if !tasks.is_empty() {
             println!("    {}", "SELECT A TASK".stylize().grey());
             println!();

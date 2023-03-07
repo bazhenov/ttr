@@ -1,6 +1,10 @@
 - name: date
   key: d
   cmd: date
+
+- name: date w. confirm
+  key: D
+  cmd: date
   confirm: true
   clear: true
 
