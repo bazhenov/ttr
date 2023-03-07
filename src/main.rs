@@ -25,6 +25,10 @@ struct Opts {
     /// ask for confirmation before exiting the program
     #[arg(short = 'c', long = "confirm")]
     confirm: bool,
+
+    /// clear screen before running task
+    #[arg(long = "clear")]
+    clear: bool,
 }
 
 const TTR_CONFIG: &str = ".ttr.yaml";
@@ -67,7 +71,7 @@ fn main() -> Result<()> {
     };
 
     'task_loop: loop {
-        if task.clear {
+        if task.clear || opts.clear {
             execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
         }
         let exit_status = create_process(task).wait().expect("Process failed");
