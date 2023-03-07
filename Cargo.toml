@@ -2,8 +2,7 @@
 edition = "2021"
 name = "ttr"
 version = "0.1.0-dev"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Denis Bazhenov <dotsid@gmail.com>"]
 
 [dependencies]
 anyhow = "1.0.69"
