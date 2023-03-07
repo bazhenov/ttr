@@ -81,18 +81,23 @@ fn main() -> Result<()> {
         }
 
         println!();
+        let prefix = "   ";
         if exit_status.success() {
-            println!(
-                "   Task {}. Press <Enter> to continue or <r> to repeat...",
-                "completed".stylize().green().bold(),
-            );
+            println!("{}Task {}.", prefix, "completed".stylize().green().bold(),);
         } else {
             println!(
-                "   Task {} ({}). Press <Enter> to continue or <r> to repeat...",
+                "{}Task {} ({}).",
+                prefix,
                 "failed".stylize().red().bold(),
                 exit_status,
             );
         };
+        println!(
+            "{}Press {} to continue or {}epeat...",
+            prefix,
+            "Enter".stylize().yellow().bold(),
+            "r".stylize().yellow().bold()
+        );
 
         'confirmation_loop: loop {
             match read_key_code()? {
