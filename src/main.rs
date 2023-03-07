@@ -1,3 +1,4 @@
+use clap::Parser;
 use crossterm::{
     cursor::MoveTo,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -17,6 +18,14 @@ use std::{
     process::{Child, Command, Stdio},
     time::Duration,
 };
+
+#[derive(Parser)]
+#[command(author, version, about)]
+struct Opts {
+    /// ask for confirmation before exiting the program
+    #[arg(short = 'c', long = "confirm")]
+    confirm: bool,
+}
 
 const TTR_CONFIG: &str = ".ttr.yaml";
 
@@ -50,6 +59,7 @@ impl Drop for AlternateScreen {
 }
 
 fn main() -> Result<()> {
+    let opts = Opts::parse();
     let mut tasks = deduplicate_tasks(read_tasks()?);
     tasks.sort_by(|a, b| a.name.cmp(&b.name));
     let Some(task) = select_task(&tasks)? else {
@@ -62,7 +72,7 @@ fn main() -> Result<()> {
         }
         let exit_status = create_process(task).wait().expect("Process failed");
 
-        if exit_status.success() && !task.confirm {
+        if exit_status.success() && !task.confirm && !opts.confirm {
             break 'task_loop;
         }
 
