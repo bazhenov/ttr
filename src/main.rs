@@ -92,6 +92,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Dediplicates task by checking if there tasks assigned to the same key.
+///
+/// If there are, the earlier task will win and latter one will be remove from the result
 fn deduplicate_tasks(tasks: Vec<Task>) -> Vec<Task> {
     let mut duplicates = HashSet::new();
     tasks
@@ -102,10 +105,10 @@ fn deduplicate_tasks(tasks: Vec<Task>) -> Vec<Task> {
 
 fn read_tasks() -> Result<Vec<Task>> {
     let mut tasks = vec![];
-    if let Some(config) = user_config() {
+    if let Some(config) = cwd_config() {
         tasks.extend(read_tasks_from_file(config)?);
     }
-    if let Some(config) = cwd_config() {
+    if let Some(config) = user_config() {
         tasks.extend(read_tasks_from_file(config)?);
     }
     Ok(tasks)
