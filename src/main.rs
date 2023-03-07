@@ -16,7 +16,7 @@ use std::{
     fs::File,
     io::stdout,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     time::Duration,
 };
 
@@ -52,6 +52,13 @@ struct Task {
     working_dir: Option<PathBuf>,
 }
 
+enum NextAction {
+    Continue,
+    Exit,
+    SelectTask,
+    RepeatTask,
+}
+
 struct AlternateScreen;
 
 impl AlternateScreen {
@@ -84,51 +91,15 @@ fn main() -> Result<()> {
                 execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
             }
             let exit_status = create_process(task)?.wait()?;
-
-            status_line = if exit_status.success() {
-                Some(format!(
-                    "Task {} {}",
-                    task.name,
-                    "completed".stylize().green(),
-                ))
-            } else {
-                Some(format!(
-                    "Task {} {} ({})",
-                    task.name,
-                    "failed".stylize().red(),
-                    exit_status,
-                ))
-            };
+            status_line = Some(format_status_line(task, exit_status));
 
             if !exit_status.success() || task.confirm || opts.confirm {
-                println!();
-                let prefix = "   ";
-                if exit_status.success() {
-                    println!("{}Task {}.", prefix, "completed".stylize().green().bold(),);
-                } else {
-                    println!(
-                        "{}Task {} ({}).",
-                        prefix,
-                        "failed".stylize().red().bold(),
-                        exit_status,
-                    );
-                };
-                println!(
-                    "{}Press {} to continue. {}epeat or {}elect another task...",
-                    prefix,
-                    "Enter".stylize().yellow().bold(),
-                    "r".stylize().yellow().bold(),
-                    "s".stylize().yellow().bold(),
-                );
-
-                'confirmation_loop: loop {
-                    match read_key_code()? {
-                        KeyCode::Enter if opts.loop_mode => continue 'select_loop,
-                        KeyCode::Enter | KeyCode::Char('q') | KeyCode::Esc => break 'select_loop,
-                        KeyCode::Char('r') => continue 'task_loop,
-                        KeyCode::Char('s') => continue 'select_loop,
-                        _ => continue 'confirmation_loop,
-                    };
+                print_confirmation(exit_status);
+                match read_next_action() {
+                    NextAction::Continue if opts.loop_mode => continue 'select_loop,
+                    NextAction::Continue | NextAction::Exit => break 'select_loop,
+                    NextAction::RepeatTask => continue 'task_loop,
+                    NextAction::SelectTask => continue 'select_loop,
                 }
             }
             if opts.loop_mode {
@@ -140,6 +111,51 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn format_status_line(task: &Task, exit_status: ExitStatus) -> String {
+    if exit_status.success() {
+        let completed = "completed".stylize().green();
+        format!("Task {} {}", task.name, completed)
+    } else {
+        let failed = "failed".stylize().red();
+        format!("Task {} {} ({})", task.name, failed, exit_status)
+    }
+}
+
+fn print_confirmation(exit_status: ExitStatus) {
+    println!();
+    let prefix = "   ";
+    if exit_status.success() {
+        println!("{}Task {}", prefix, "completed".stylize().green().bold(),);
+    } else {
+        println!(
+            "{}Task {} ({})",
+            prefix,
+            "failed".stylize().red().bold(),
+            exit_status,
+        );
+    };
+    println!();
+    println!(
+        "{}Press {} to continue. {}epeat or {}elect another task...",
+        prefix,
+        "Enter".stylize().yellow().bold(),
+        "r".stylize().yellow().bold(),
+        "s".stylize().yellow().bold(),
+    );
+}
+
+fn read_next_action() -> NextAction {
+    loop {
+        match read_key_code().expect("Unable to read key code") {
+            KeyCode::Enter => break NextAction::Continue,
+            KeyCode::Char('q') | KeyCode::Esc => break NextAction::Exit,
+            KeyCode::Char('r') => break NextAction::RepeatTask,
+            KeyCode::Char('s') => break NextAction::SelectTask,
+            _ => continue,
+        }
+    }
 }
 
 /// Dediplicates task by checking if there tasks assigned to the same key.
@@ -216,6 +232,7 @@ fn read_key_event() -> Result<KeyEvent> {
     Ok(key_code)
 }
 
+/// Presents a user with the list of tasks and reads the selected task
 fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Option<&'a Task>> {
     let _alt = AlternateScreen::enter();
     let mut stdout = stdout().lock();
@@ -256,7 +273,7 @@ fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Op
             }
         } else {
             println!("    {}", "No tasks configured".stylize().bold());
-            println!("    Create file {} in current directory", TTR_CONFIG);
+            println!("    Create file {} in the current directory", TTR_CONFIG);
         }
         println!();
         println!("    {} → {:10}", "q".stylize().red(), "quit");
