@@ -12,6 +12,7 @@ use crossterm::{
 use serde::Deserialize;
 use std::{
     collections::HashSet,
+    env::current_dir,
     fs::File,
     io::stdout,
     path::{Path, PathBuf},
@@ -48,6 +49,7 @@ struct Task {
     confirm: bool,
     #[serde(default)]
     clear: bool,
+    working_dir: Option<PathBuf>,
 }
 
 struct AlternateScreen;
@@ -81,7 +83,7 @@ fn main() -> Result<()> {
             if task.clear || opts.clear {
                 execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
             }
-            let exit_status = create_process(task).wait().expect("Process failed");
+            let exit_status = create_process(task)?.wait()?;
 
             status_line = if exit_status.success() {
                 Some(format!(
@@ -182,14 +184,17 @@ fn cwd_config() -> Option<PathBuf> {
     }
 }
 
-fn create_process(task: &Task) -> Child {
-    Command::new("sh")
+fn create_process(task: &Task) -> Result<Child> {
+    let current_dir = current_dir()?;
+    let working_dir = task.working_dir.as_ref().unwrap_or(&current_dir);
+    let child = Command::new("sh")
         .args(["-c", &format!("exec {}", task.cmd)])
+        .current_dir(working_dir)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Unable to start")
+        .spawn()?;
+    Ok(child)
 }
 
 fn read_key_code() -> Result<KeyCode> {

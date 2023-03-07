@@ -16,6 +16,12 @@
   key: F
   cmd: 'false'
 
+- name: find/src
+  key: S
+  cmd: find .
+  working_dir: src/
+  confirm: true
+
 - name: cargo install
   key: I
   cmd: cargo install --path=.
