@@ -16,6 +16,10 @@
   key: F
   cmd: 'false'
 
+- name: cargo install
+  key: I
+  cmd: cargo install --path=.
+
 - name: vim
   key: v
   cmd: nvim
