@@ -62,16 +62,32 @@ enum NextAction {
 struct AlternateScreen;
 
 impl AlternateScreen {
-    fn enter() -> Result<Self> {
-        execute!(stdout(), EnterAlternateScreen)?;
-        Ok(Self)
+    fn enter() -> Self {
+        execute!(stdout(), EnterAlternateScreen).expect("Unable to enter alternative screen");
+        Self
     }
 }
 
 impl Drop for AlternateScreen {
     fn drop(&mut self) {
-        // No need to unpack Result. We can't do anythere here anyway
+        // No need to unpack Result. We can't do anything about it anyway
         let _ = execute!(stdout(), LeaveAlternateScreen);
+    }
+}
+
+struct RawMode;
+
+impl RawMode {
+    fn enter() -> Self {
+        enable_raw_mode().expect("Unable to enable raw mode");
+        Self
+    }
+}
+
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        // No need to unpack Result. We can't do anything about it anyway
+        let _ = disable_raw_mode();
     }
 }
 
@@ -94,8 +110,7 @@ fn main() -> Result<()> {
             status_line = Some(format_status_line(task, exit_status));
 
             if !exit_status.success() || task.confirm || opts.confirm {
-                print_confirmation(exit_status);
-                match read_next_action() {
+                match confirm_task(exit_status) {
                     NextAction::Continue if opts.loop_mode => continue 'select_loop,
                     NextAction::Continue | NextAction::Exit => break 'select_loop,
                     NextAction::RepeatTask => continue 'task_loop,
@@ -123,7 +138,8 @@ fn format_status_line(task: &Task, exit_status: ExitStatus) -> String {
     }
 }
 
-fn print_confirmation(exit_status: ExitStatus) {
+fn confirm_task(exit_status: ExitStatus) -> NextAction {
+    // Print confirmation dialog
     println!();
     let prefix = "   ";
     if exit_status.success() {
@@ -144,11 +160,10 @@ fn print_confirmation(exit_status: ExitStatus) {
         "r".stylize().yellow().bold(),
         "s".stylize().yellow().bold(),
     );
-}
 
-fn read_next_action() -> NextAction {
+    // Reading user decision
     loop {
-        match read_key_code().expect("Unable to read key code") {
+        match next_key_event().code {
             KeyCode::Enter => break NextAction::Continue,
             KeyCode::Char('q') | KeyCode::Esc => break NextAction::Exit,
             KeyCode::Char('r') => break NextAction::RepeatTask,
@@ -158,46 +173,36 @@ fn read_next_action() -> NextAction {
     }
 }
 
-/// Dediplicates task by checking if there tasks assigned to the same key.
+/// Deduplicate tasks by checking if there are tasks assigned to the same key.
 ///
-/// If there are, the earlier task will win and latter one will be remove from the result
+/// The earlier task will win and the latter will be removed from the result
 fn deduplicate_tasks(tasks: Vec<Task>) -> Vec<Task> {
     let mut duplicates = HashSet::new();
     tasks
         .into_iter()
         .filter(|t| duplicates.insert(t.key))
-        .collect::<Vec<_>>()
+        .collect()
 }
 
 fn read_tasks() -> Result<Vec<Task>> {
-    let mut tasks = vec![];
-    if let Some(config) = cwd_config() {
-        tasks.extend(read_tasks_from_file(config)?);
+    fn tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<Task>> {
+        let file = File::open(path)?;
+        Ok(serde_yaml::from_reader(file)?)
     }
-    if let Some(config) = user_config() {
-        tasks.extend(read_tasks_from_file(config)?);
+
+    let cwd_config = Some(PathBuf::from(TTR_CONFIG)).filter(|config| config.is_file());
+    let user_config = dirs::home_dir()
+        .map(|home| home.join(TTR_CONFIG))
+        .filter(|config| config.is_file());
+
+    let mut tasks = vec![];
+    if let Some(config) = cwd_config {
+        tasks.extend(tasks_from_file(config)?);
+    }
+    if let Some(config) = user_config {
+        tasks.extend(tasks_from_file(config)?);
     }
     Ok(tasks)
-}
-
-fn read_tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<Task>> {
-    let file = File::open(path)?;
-    Ok(serde_yaml::from_reader(file)?)
-}
-
-fn user_config() -> Option<PathBuf> {
-    dirs::home_dir()
-        .map(|home| home.join(TTR_CONFIG))
-        .filter(|config| config.is_file())
-}
-
-fn cwd_config() -> Option<PathBuf> {
-    let path = PathBuf::from(TTR_CONFIG);
-    if path.is_file() {
-        Some(path)
-    } else {
-        None
-    }
 }
 
 fn create_process(task: &Task) -> Result<Child> {
@@ -213,23 +218,16 @@ fn create_process(task: &Task) -> Result<Child> {
     Ok(child)
 }
 
-fn read_key_code() -> Result<KeyCode> {
-    let KeyEvent { code, .. } = read_key_event()?;
-    Ok(code)
-}
-
-fn read_key_event() -> Result<KeyEvent> {
-    enable_raw_mode()?;
-    let key_code = loop {
-        if let Ok(true) = event::poll(Duration::from_secs(60)) {
-            let event = event::read()?;
-            if let Event::Key(e) = event {
-                break e;
-            }
+fn next_key_event() -> KeyEvent {
+    let _raw = RawMode::enter();
+    loop {
+        let Ok(true) = event::poll(Duration::from_secs(60)) else {
+            continue;
+        };
+        if let Event::Key(e) = event::read().expect("Unable to read event") {
+            break e;
         }
-    };
-    disable_raw_mode()?;
-    Ok(key_code)
+    }
 }
 
 /// Presents a user with the list of tasks and reads the selected task
@@ -284,7 +282,7 @@ fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Op
 
         let KeyEvent {
             code, modifiers, ..
-        } = read_key_event()?;
+        } = next_key_event();
         let task = match code {
             KeyCode::Char('q') => Ok(None),
             KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => Ok(None),
