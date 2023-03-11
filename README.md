@@ -58,6 +58,14 @@ bindkey -s '^k' '^E^Uttr^M'
 
 This will bind `ttr` to <kbd>Ctrl</kbd>+<kbd>k</kbd>
 
+### fish
+
+Put following in `~/.config/fish/config.fish`
+
+```
+bind \ck 'echo; ttr; commandline -f repaint'
+```
+
 ### bash
 
 Analog in bash would be following configuration in  `.bashrc`
