@@ -33,6 +33,8 @@ jobs:
         include:
         - target: x86_64-apple-darwin
           os: macos-11
+        - target: x86_64-unknown-linux-gnu
+          os: ubuntu-20.04
     runs-on: ${{ matrix.os}}
     steps:
     - uses: actions/checkout@v3
