@@ -1,0 +1,5 @@
+Package: ttr
+Version: __VERSION__
+Architecture: amd64
+Maintainer: Bazhenov Denis <dotsid@gmail.com>
+Description: Interactive terminal task runner
