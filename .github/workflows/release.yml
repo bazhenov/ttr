@@ -65,7 +65,7 @@ jobs:
       run: |
         mkdir -p ${{ env.RELEASE_FQN }}/usr/local
         mkdir -p ${{ env.RELEASE_FQN }}/DEBIAN
-        cp release/bin ${{ env.RELEASE_FQN }}/usr/local
+        cp -r release/bin ${{ env.RELEASE_FQN }}/usr/local
         cat deb/control | sed 's/__VERSION__/0.1.0/' > ${{ env.RELEASE_FQN }}/DEBIAN/control
         dpkg-deb --build --root-owner-group ${{ env.RELEASE_FQN }}
         rm -rf ${{ env.RELEASE_FQN }}
