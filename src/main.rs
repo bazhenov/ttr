@@ -190,18 +190,30 @@ fn read_tasks() -> Result<Vec<Task>> {
         Ok(serde_yaml::from_reader(file)?)
     }
 
-    let cwd_config = Some(PathBuf::from(TTR_CONFIG)).filter(|config| config.is_file());
-    let user_config = dirs::home_dir()
-        .map(|home| home.join(TTR_CONFIG))
-        .filter(|config| config.is_file());
-
     let mut tasks = vec![];
+
+    // ./.ttr.yaml
+    let cwd_config = Some(PathBuf::from(TTR_CONFIG)).filter(|config| config.is_file());
     if let Some(config) = cwd_config {
         tasks.extend(tasks_from_file(config)?);
     }
-    if let Some(config) = user_config {
+
+    // ~/.ttr.yaml
+    let home_dir_config = dirs::home_dir()
+        .map(|home| home.join(TTR_CONFIG))
+        .filter(|config| config.is_file());
+    if let Some(config) = home_dir_config {
         tasks.extend(tasks_from_file(config)?);
     }
+
+    // ~/.config/ttr/.ttr.yaml
+    let config_dir_config = dirs::config_dir()
+        .map(|home| home.join("ttr").join(TTR_CONFIG))
+        .filter(|config| config.is_file());
+    if let Some(config) = config_dir_config {
+        tasks.extend(tasks_from_file(config)?);
+    }
+
     Ok(tasks)
 }
 
