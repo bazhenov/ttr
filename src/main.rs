@@ -186,8 +186,17 @@ fn deduplicate_tasks(tasks: Vec<Task>) -> Vec<Task> {
 
 fn read_tasks() -> Result<Vec<Task>> {
     fn tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<Task>> {
-        let file = File::open(path)?;
-        Ok(serde_yaml::from_reader(file)?)
+        let file = File::open(path.as_ref())?;
+        let mut tasks: Vec<Task> = serde_yaml::from_reader(file)?;
+
+        // working directories if provided interpreted as relative to the file they are defined in
+        let context_dir = path.as_ref().parent();
+        for task in tasks.iter_mut() {
+            if let Some(working_dir) = &task.working_dir {
+                task.working_dir = context_dir.map(|p| p.join(working_dir));
+            }
+        }
+        Ok(tasks)
     }
 
     let mut tasks = vec![];
