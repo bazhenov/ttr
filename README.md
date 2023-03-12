@@ -30,7 +30,13 @@ $ cargo install --path=.
 
 ## Configuration
 
-`ttr` looks for a `.ttr.yaml` in a current working directory as well as home directory. Tasks from both files are merged together.
+`ttr` looks for a `.ttr.yaml` file in following directories:
+
+* current working directory;
+* home directory;
+* config directory (`$XDG_CONFIG_HOME` or `.config/ttr` on Linux and `~/Library/Application Support/ttr` on macOS).
+
+Tasks from all files are merged together. Prirority is given to task defined earlier.
 
 Configuration example:
 
