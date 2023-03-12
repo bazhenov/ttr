@@ -192,10 +192,19 @@ fn read_tasks() -> Result<Vec<Task>> {
 
     let mut tasks = vec![];
 
-    // ./.ttr.yaml
-    let cwd_config = Some(PathBuf::from(TTR_CONFIG)).filter(|config| config.is_file());
-    if let Some(config) = cwd_config {
-        tasks.extend(tasks_from_file(config)?);
+    let stop_dir = dirs::home_dir().unwrap_or(PathBuf::from("/"));
+    let start_dir = current_dir()?;
+    let mut dir = Some(start_dir.as_path());
+
+    while let Some(d) = dir {
+        if d == stop_dir {
+            break;
+        }
+        let config = d.join(TTR_CONFIG);
+        if config.is_file() {
+            tasks.extend(tasks_from_file(config)?);
+        }
+        dir = d.parent()
     }
 
     // ~/.ttr.yaml
