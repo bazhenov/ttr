@@ -52,6 +52,84 @@ struct Task {
     working_dir: Option<PathBuf>,
 }
 
+#[derive(Deserialize, Debug)]
+struct Group {
+    name: String,
+    key: char,
+    children: Vec<TaskOrGroup>,
+}
+
+#[derive(Deserialize, Debug)]
+enum TaskOrGroup {
+    Task(Task),
+    Group(Group),
+}
+
+impl TaskOrGroup {
+    fn key(&self) -> char {
+        match self {
+            Self::Task(t) => t.key,
+            Self::Group(g) => g.key,
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            Self::Task(t) => &t.name,
+            Self::Group(g) => &g.name,
+        }
+    }
+
+    /// Iterates over all tasks and groups recursively
+    ///
+    /// Returns iterator over tuple of [`TaskOrGroup`] and path from the root
+    /// to the element in an [`Vec`] form
+    fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a TaskOrGroup, Vec<&'a Group>)> {
+        TaskIterator {
+            root: Some(self),
+            stack: vec![],
+        }
+    }
+}
+
+struct TaskIterator<'a> {
+    root: Option<&'a TaskOrGroup>,
+    stack: Vec<(usize, &'a Group)>,
+}
+
+impl<'a> Iterator for TaskIterator<'a> {
+    type Item = (&'a TaskOrGroup, Vec<&'a Group>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        fn breadcrumbs<'a, T>(input: &[(T, &'a Group)]) -> Vec<&'a Group> {
+            input.iter().map(|(_, b)| *b).collect()
+        }
+
+        if let Some(item) = self.root.take() {
+            if let TaskOrGroup::Group(g) = item {
+                self.stack.push((0, g));
+            }
+            return Some((item, vec![]));
+        }
+        'next_element: loop {
+            let Some((pos, group)) = self.stack.last_mut() else {
+                return None;
+            };
+            let Some(child) = group.children.get(*pos) else {
+                self.stack.pop();
+                continue 'next_element;
+            };
+
+            *pos += 1;
+            let breadcrumbs = breadcrumbs(&self.stack);
+            if let TaskOrGroup::Group(g) = child {
+                self.stack.push((0, g));
+            }
+            return Some((child, breadcrumbs));
+        }
+    }
+}
+
 enum NextAction {
     Continue,
     Exit,
@@ -94,11 +172,12 @@ impl Drop for RawMode {
 fn main() -> Result<()> {
     let opts = Opts::parse();
     let mut tasks = deduplicate_tasks(read_tasks()?);
-    tasks.sort_by(|a, b| a.name.cmp(&b.name));
+    tasks.sort_by(|a, b| a.name().cmp(&b.name()));
 
     let mut status_line: Option<String> = None;
     'select_loop: loop {
-        let Some(task) = select_task(&tasks, &status_line)? else {
+        unimplemented!();
+        let Some(task) = select_task(&[], &status_line)? else {
             return Ok(())
         };
 
@@ -176,27 +255,28 @@ fn confirm_task(exit_status: ExitStatus) -> NextAction {
 /// Deduplicate tasks by checking if there are tasks assigned to the same key.
 ///
 /// The earlier task will win and the latter will be removed from the result
-fn deduplicate_tasks(tasks: Vec<Task>) -> Vec<Task> {
+fn deduplicate_tasks(tasks: Vec<TaskOrGroup>) -> Vec<TaskOrGroup> {
     let mut duplicates = HashSet::new();
     tasks
         .into_iter()
-        .filter(|t| duplicates.insert(t.key))
+        .filter(|t| duplicates.insert(t.key()))
         .collect()
 }
 
-fn read_tasks() -> Result<Vec<Task>> {
-    fn tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<Task>> {
+fn read_tasks() -> Result<Vec<TaskOrGroup>> {
+    fn tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<TaskOrGroup>> {
         let file = File::open(path.as_ref())?;
-        let mut tasks: Vec<Task> = serde_yaml::from_reader(file)?;
+        let mut config: Vec<TaskOrGroup> = serde_yaml::from_reader(file)?;
+        unimplemented!();
 
         // working directories if provided interpreted as relative to the file they are defined in
         let context_dir = path.as_ref().parent();
-        for task in tasks.iter_mut() {
-            if let Some(working_dir) = &task.working_dir {
-                task.working_dir = context_dir.map(|p| p.join(working_dir));
-            }
+        for task in config.iter_mut() {
+            // if let Some(working_dir) = &task.working_dir {
+            //     task.working_dir = context_dir.map(|p| p.join(working_dir));
+            // }
         }
-        Ok(tasks)
+        Ok(config)
     }
 
     let mut tasks = vec![];
@@ -328,5 +408,69 @@ fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Op
             Ok(task) => return Ok(task),
             Err(reason) => error = Some(reason),
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn check_yaml_serialization() {
+        let yaml = "!Group
+            name: foo
+            key: f
+            children:
+            - !Task
+                name: foo
+                cmd: foo
+                key: b
+        ";
+        let group: TaskOrGroup = serde_yaml::from_str(yaml).unwrap();
+        let TaskOrGroup::Group(g) = group else {
+            panic!("No group found");
+        };
+        assert_eq!(1, g.children.len());
+    }
+
+    #[test]
+    fn check_iteration() {
+        let yaml = "!Group
+            name: foo
+            key: f
+            children:
+            - !Task
+                name: bar
+                cmd: --
+                key: b
+            - !Group
+                name: baz
+                key: u
+                children:
+                - !Task
+                    name: boo
+                    key: o
+                    cmd: --
+        ";
+        let group: TaskOrGroup = serde_yaml::from_str(yaml).unwrap();
+
+        fn build_breadcrumbs(input: &[&Group]) -> String {
+            let strings = input.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
+            strings.join(" > ")
+        }
+        let names: Vec<_> = group
+            .iter()
+            .map(|(i, b)| (i.name(), build_breadcrumbs(&b)))
+            .collect();
+        assert_eq!(
+            vec![
+                ("foo", "".to_string()),
+                ("bar", "foo".to_string()),
+                ("baz", "foo".to_string()),
+                ("boo", "foo > baz".to_string()),
+            ],
+            names
+        );
     }
 }
