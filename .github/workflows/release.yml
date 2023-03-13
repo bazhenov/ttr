@@ -33,6 +33,8 @@ jobs:
         include:
         - target: x86_64-apple-darwin
           os: macos-11
+        - target: x86_64-unknown-linux-gnu
+          os: ubuntu-20.04
     runs-on: ${{ matrix.os}}
     steps:
     - uses: actions/checkout@v3
@@ -48,13 +50,25 @@ jobs:
 
     - name: Create Release Archive
       run: |
-        cp README.md release/
-        mv release ${{ env.RELEASE_FQN }}
-        tar --exclude=".*" -czvf ${{ env.RELEASE_FQN }}.tar.gz ${{ env.RELEASE_FQN }}
+        mkdir ${{ env.RELEASE_FQN }}
+        cp -r release/bin ${{ env.RELEASE_FQN }}/bin
+        cp README.md ${{ env.RELEASE_FQN }}
+        tar -czvf ${{ env.RELEASE_FQN }}.tar.gz ${{ env.RELEASE_FQN }}
+        rm -rf ${{ env.RELEASE_FQN }}
 
-    - name: Calculating Release SHA256
+    - name: Release SHA256 checksum
       run: |
-        shasum -a 256 ${{ env.RELEASE_FQN }}.tar.gz > ${{ env.RELEASE_FQN }}.tar.gz.sha256
+        shasum -a 256 ${{ env.RELEASE_FQN }}.tar.gz
+        
+    - name: Create .deb release
+      if: matrix.os == 'ubuntu-20.04'
+      run: |
+        mkdir -p ${{ env.RELEASE_FQN }}/usr/local
+        mkdir -p ${{ env.RELEASE_FQN }}/DEBIAN
+        cp -r release/bin ${{ env.RELEASE_FQN }}/usr/local
+        cat deb/control | sed 's/__VERSION__/0.1.0/' > ${{ env.RELEASE_FQN }}/DEBIAN/control
+        dpkg-deb --build --root-owner-group ${{ env.RELEASE_FQN }}
+        rm -rf ${{ env.RELEASE_FQN }}
 
     - name: Upload release archive
       uses: actions/upload-release-asset@v1.0.2
@@ -65,13 +79,14 @@ jobs:
         asset_path: ${{ env.RELEASE_FQN }}.tar.gz
         asset_name: ${{ env.RELEASE_FQN }}.tar.gz
         asset_content_type: application/octet-stream
-
-    - name: Upload release archive SHA256
+    
+    - name: Upload .deb release archive
+      if: matrix.os == 'ubuntu-20.04'
       uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ${{ env.RELEASE_FQN }}.tar.gz.sha256
-        asset_name: ${{ env.RELEASE_FQN }}.tar.gz.sha256
-        asset_content_type: text/plain
+        asset_path: ${{ env.RELEASE_FQN }}.deb
+        asset_name: ${{ env.RELEASE_FQN }}.deb
+        asset_content_type: application/octet-stream

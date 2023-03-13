@@ -14,18 +14,25 @@ The main difference is ttr doesn't depend on any editor and works right in the s
 
 ## Installation
 
-### macOS
+### Homebrew (macOS and Linux)
 
 ```console
 $ brew install bazhenov/tap/ttr
 ```
 
-### Building from sources
-
-You need rust toolchain and sources.
+### Linux (.deb)
 
 ```console
-$ cargo install --path=.
+$ cur -OL ...
+$ deb -i ttr-0.2.0-x86_64-linux.deb
+```
+
+### Building from sources
+
+You need rust toolchain to be installed.
+
+```console
+$ cargo install --git=https://github.com/bazhenov/ttr.git
 ```
 
 ## Configuration
