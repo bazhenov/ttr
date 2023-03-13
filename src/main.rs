@@ -175,9 +175,13 @@ fn main() -> Result<()> {
     tasks.sort_by(|a, b| a.name().cmp(&b.name()));
 
     let mut status_line: Option<String> = None;
+    let root = Group {
+        name: "ROOT".to_string(),
+        key: 'r',
+        children: tasks,
+    };
     'select_loop: loop {
-        unimplemented!();
-        let Some(task) = select_task(&[], &status_line)? else {
+        let Some(task) = select_task(&root, &status_line)? else {
             return Ok(())
         };
 
@@ -267,7 +271,6 @@ fn read_tasks() -> Result<Vec<TaskOrGroup>> {
     fn tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<TaskOrGroup>> {
         let file = File::open(path.as_ref())?;
         let mut config: Vec<TaskOrGroup> = serde_yaml::from_reader(file)?;
-        unimplemented!();
 
         // working directories if provided interpreted as relative to the file they are defined in
         let context_dir = path.as_ref().parent();
@@ -341,7 +344,8 @@ fn next_key_event() -> KeyEvent {
 }
 
 /// Presents a user with the list of tasks and reads the selected task
-fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Option<&'a Task>> {
+fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Option<&'a Task>> {
+    let mut stack = vec![group];
     let _alt = AlternateScreen::enter();
     let mut stdout = stdout().lock();
 
@@ -350,65 +354,93 @@ fn select_task<'a>(tasks: &'a [Task], status_line: &Option<String>) -> Result<Op
         execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
         println!();
         if let Some(status) = status_line {
-            println!("    {}", status);
+            println!("  {}", status);
             println!();
         }
+        let tasks = &stack.last().unwrap().children;
         if !tasks.is_empty() {
-            println!("    {}", "SELECT A TASK".stylize().grey());
-            println!();
-            let (width, _) = crossterm::terminal::size()?;
-
-            // 4 characters is a padding from screen edge
-            // 20 is width of one task representation
-            let columns_fit = (width as usize - 4) / 20;
-            let rows = (tasks.len() + columns_fit - 1) / columns_fit;
-
-            let columns = tasks.chunks(rows).collect::<Vec<_>>();
-            for i in 0..rows {
-                print!("  ");
-                for column in &columns {
-                    let Some(task) = column.get(i) else {
-                        break;
-                    };
-                    let name = if task.name.len() > 12 {
-                        format!("{}…", task.name.chars().take(11).collect::<String>())
-                    } else {
-                        task.name.clone()
-                    };
-                    print!("  {} → {:12}  ", task.key.stylize().green().bold(), name);
-                }
-                println!();
+            print!("  {}", "SELECT A TASK".stylize().grey());
+            if stack.len() > 1 {
+                let breadcrumbs = stack[1..]
+                    .iter()
+                    .map(|g| g.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" → ");
+                print!(" → {}", breadcrumbs);
             }
+            println!();
+            println!();
+
+            draw_tasks(tasks)?;
         } else {
             println!("    {}", "No tasks configured".stylize().bold());
             println!("    Create file {} in the current directory", TTR_CONFIG);
         }
         println!();
-        println!("    {} → {:10}", "q".stylize().red(), "quit");
+        println!("    {} → {:12}", "q".stylize().red(), "quit");
+        if stack.len() > 1 {
+            println!("    {} → {:12}", "<BS>".stylize().red(), "up");
+        }
 
         if let Some(e) = error.take() {
-            println!("\n   {}\n", e.stylize().red());
+            println!();
+            println!("   {}", e.stylize().red());
+            println!();
         }
 
         let KeyEvent {
             code, modifiers, ..
         } = next_key_event();
         let task = match code {
-            KeyCode::Char('q') => Ok(None),
-            KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => Ok(None),
+            KeyCode::Char('q') => return Ok(None),
+            KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => return Ok(None),
             KeyCode::Char(' ') => Err("Whitespace is not allowed".to_string()),
+            KeyCode::Backspace | KeyCode::Esc if stack.len() <= 1 => {
+                Err("This is the root".to_string())
+            }
+            KeyCode::Backspace | KeyCode::Esc if stack.len() > 1 => {
+                stack.pop();
+                continue;
+            }
             KeyCode::Char(ch) => tasks
                 .iter()
-                .find(|t| t.key == ch)
-                .map(Some)
+                .find(|t| t.key() == ch)
                 .ok_or(format!("No task for key: {}", ch)),
             _ => Err("Please enter character key".to_string()),
         };
         match task {
-            Ok(task) => return Ok(task),
+            Ok(TaskOrGroup::Task(task)) => return Ok(Some(task)),
+            Ok(TaskOrGroup::Group(group)) => {
+                stack.push(group);
+                continue;
+            }
             Err(reason) => error = Some(reason),
         };
     }
+}
+
+fn draw_tasks(tasks: &Vec<TaskOrGroup>) -> Result<()> {
+    let (width, _) = crossterm::terminal::size()?;
+    // 4 characters is a padding from screen edge
+    // 20 is width of one task representation
+    let columns_fit = (width as usize - 4) / 20;
+    let rows = (tasks.len() + columns_fit - 1) / columns_fit;
+    let columns = tasks.chunks(rows).collect::<Vec<_>>();
+    Ok(for i in 0..rows {
+        print!("  ");
+        for column in &columns {
+            let Some(task) = column.get(i) else {
+                break;
+            };
+            let name = if task.name().len() > 12 {
+                format!("{}…", task.name().chars().take(11).collect::<String>())
+            } else {
+                task.name().to_string()
+            };
+            print!("  {} → {:12}  ", task.key().stylize().green().bold(), name);
+        }
+        println!();
+    })
 }
 
 #[cfg(test)]
