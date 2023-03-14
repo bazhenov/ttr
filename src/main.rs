@@ -1,6 +1,6 @@
 use clap::Parser;
 use crossterm::{
-    cursor::MoveTo,
+    cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
     style::Stylize,
@@ -118,7 +118,8 @@ struct AlternateScreen;
 
 impl AlternateScreen {
     fn enter() -> Self {
-        execute!(stdout(), EnterAlternateScreen).expect("Unable to enter alternative screen");
+        execute!(stdout(), EnterAlternateScreen, cursor::Hide)
+            .expect("Unable to enter alternative screen");
         Self
     }
 }
@@ -126,7 +127,7 @@ impl AlternateScreen {
 impl Drop for AlternateScreen {
     fn drop(&mut self) {
         // No need to unpack Result. We can't do anything about it anyway
-        let _ = execute!(stdout(), LeaveAlternateScreen);
+        let _ = execute!(stdout(), LeaveAlternateScreen, cursor::Show);
     }
 }
 
@@ -158,7 +159,7 @@ fn main() -> Result<()> {
 
         'task_loop: loop {
             if task.clear || opts.clear {
-                execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+                execute!(stdout(), Clear(ClearType::All), cursor::MoveTo(0, 0))?;
             }
             let exit_status = create_process(task)?.wait()?;
             status_line = Some(format_status_line(task, exit_status));
@@ -393,7 +394,7 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
 
     let mut error: Option<String> = None;
     loop {
-        execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
+        execute!(stdout, Clear(ClearType::All), cursor::MoveTo(0, 0))?;
         println!();
         if let Some(status) = status_line {
             println!("  {}", status);
@@ -421,7 +422,7 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
         println!();
         println!("    {} → {:12}", "q".stylize().red(), "quit");
         if stack.len() > 1 {
-            println!("    {} → {:12}", "<BS>".stylize().red(), "up");
+            println!(" {} → {:12}", "<BS>".stylize().red(), "up");
         }
 
         if let Some(e) = error.take() {
