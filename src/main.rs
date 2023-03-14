@@ -11,7 +11,7 @@ use crossterm::{
 };
 use serde::Deserialize;
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     env::current_dir,
     fs::File,
     io::stdout,
@@ -52,49 +52,30 @@ struct Task {
     working_dir: Option<PathBuf>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct Group {
     name: String,
     key: char,
-    children: Vec<TaskOrGroup>,
+    #[serde(default)]
+    groups: Vec<Group>,
+    #[serde(default)]
+    tasks: Vec<Task>,
 }
 
-#[derive(Deserialize, Debug)]
-enum TaskOrGroup {
-    Task(Task),
-    Group(Group),
-}
-
-impl TaskOrGroup {
-    fn key(&self) -> char {
-        match self {
-            Self::Task(t) => t.key,
-            Self::Group(g) => g.key,
-        }
-    }
-
-    fn name(&self) -> &str {
-        match self {
-            Self::Task(t) => &t.name,
-            Self::Group(g) => &g.name,
-        }
-    }
-
+impl Group {
     /// Iterates over all tasks and groups recursively
     ///
     /// Returns iterator over tuple of [`TaskOrGroup`] and path from the root
     /// to the element in an [`Vec`] form
-    fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Task> {
-        match self {
-            TaskOrGroup::Group(g) => TaskIterator {
-                tasks: vec![],
-                groups: vec![g],
-            },
-            TaskOrGroup::Task(t) => TaskIterator {
-                tasks: vec![t],
-                groups: vec![],
-            },
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Task> {
+        TaskIterator {
+            tasks: vec![],
+            groups: vec![self],
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.tasks.is_empty() && self.groups.is_empty()
     }
 }
 
@@ -115,11 +96,11 @@ impl<'a> Iterator for TaskIterator<'a> {
             let Some(group) = self.groups.pop() else {
                 return None;
             };
-            for child in group.children.iter_mut() {
-                match child {
-                    TaskOrGroup::Group(g) => self.groups.push(g),
-                    TaskOrGroup::Task(t) => self.tasks.push(t),
-                }
+            for task in group.tasks.iter_mut() {
+                self.tasks.push(task)
+            }
+            for task in group.groups.iter_mut() {
+                self.groups.push(task)
             }
             continue;
         }
@@ -167,17 +148,11 @@ impl Drop for RawMode {
 
 fn main() -> Result<()> {
     let opts = Opts::parse();
-    let mut tasks = deduplicate_tasks(read_tasks()?);
-    tasks.sort_by(|a, b| a.name().cmp(&b.name()));
+    let tasks = merge_groups(read_tasks()?);
 
     let mut status_line: Option<String> = None;
-    let root = Group {
-        name: "ROOT".to_string(),
-        key: 'r',
-        children: tasks,
-    };
     'select_loop: loop {
-        let Some(task) = select_task(&root, &status_line)? else {
+        let Some(task) = select_task(&tasks, &status_line)? else {
             return Ok(())
         };
 
@@ -255,26 +230,74 @@ fn confirm_task(exit_status: ExitStatus) -> NextAction {
 /// Deduplicate tasks by checking if there are tasks assigned to the same key.
 ///
 /// The earlier task will win and the latter will be removed from the result
-fn deduplicate_tasks(tasks: Vec<TaskOrGroup>) -> Vec<TaskOrGroup> {
-    let mut duplicates = HashSet::new();
-    tasks
+fn merge_groups(groups: Vec<Group>) -> Group {
+    let mut new_tasks: HashMap<char, Task> = HashMap::new();
+    let mut new_groups: HashMap<char, Vec<Group>> = HashMap::new();
+    let Some(first_group) = groups.get(0) else {
+        return Group::default();
+    };
+    let group_name = first_group.name.clone();
+    let group_key = first_group.key;
+    let mut groups = groups
         .into_iter()
-        .filter(|t| duplicates.insert(t.key()))
-        .collect()
+        .filter(|g| g.name == group_name)
+        .filter(|g| g.key == group_key)
+        .collect::<Vec<_>>();
+    if groups.len() == 1 {
+        return groups.swap_remove(0);
+    }
+    for g in groups.into_iter() {
+        for group in g.groups.into_iter() {
+            new_groups
+                .entry(group.key)
+                .or_insert_with(Vec::new)
+                .push(group)
+        }
+
+        for task in g.tasks.into_iter() {
+            new_tasks.entry(task.key).or_insert(task);
+        }
+    }
+
+    let mut groups = vec![];
+    for (_, defs) in new_groups {
+        groups.push(merge_groups(defs));
+    }
+
+    let tasks = new_tasks.into_values().collect::<Vec<_>>();
+    Group {
+        name: group_name,
+        key: group_key,
+        groups,
+        tasks,
+    }
 }
 
-fn read_tasks() -> Result<Vec<TaskOrGroup>> {
-    fn tasks_from_file(path: impl AsRef<Path>) -> Result<Vec<TaskOrGroup>> {
+fn read_tasks() -> Result<Vec<Group>> {
+    // Basically mirror [`Group`] struct without some arguments meaningless for the root group
+    #[derive(Deserialize)]
+    struct Root {
+        groups: Option<Vec<Group>>,
+        tasks: Option<Vec<Task>>,
+    }
+    fn tasks_from_file(path: impl AsRef<Path>) -> Result<Group> {
         let file = File::open(path.as_ref())?;
-        let mut config: Vec<TaskOrGroup> = serde_yaml::from_reader(file)?;
-
+        let config: Root = serde_yaml::from_reader(file)?;
+        let tasks = config.tasks.unwrap_or_default();
+        let groups = config.groups.unwrap_or_default();
+        let key = '_';
+        let name = "ROOT".to_string();
+        let mut config = Group {
+            tasks,
+            groups,
+            name,
+            key,
+        };
         // working directories if provided interpreted as relative to the file they are defined in
         let context_dir = path.as_ref().parent();
         for task in config.iter_mut() {
-            for t in task.iter_mut() {
-                if let Some(working_dir) = &t.working_dir {
-                    t.working_dir = context_dir.map(|p| p.join(working_dir));
-                }
+            if let Some(working_dir) = &task.working_dir {
+                task.working_dir = context_dir.map(|p| p.join(working_dir));
             }
         }
         Ok(config)
@@ -292,7 +315,7 @@ fn read_tasks() -> Result<Vec<TaskOrGroup>> {
         }
         let config = d.join(TTR_CONFIG);
         if config.is_file() {
-            tasks.extend(tasks_from_file(config)?);
+            tasks.push(tasks_from_file(config)?);
         }
         dir = d.parent()
     }
@@ -302,7 +325,7 @@ fn read_tasks() -> Result<Vec<TaskOrGroup>> {
         .map(|home| home.join(TTR_CONFIG))
         .filter(|config| config.is_file());
     if let Some(config) = home_dir_config {
-        tasks.extend(tasks_from_file(config)?);
+        tasks.push(tasks_from_file(config)?);
     }
 
     // ~/.config/ttr/.ttr.yaml
@@ -310,7 +333,7 @@ fn read_tasks() -> Result<Vec<TaskOrGroup>> {
         .map(|home| home.join("ttr").join(TTR_CONFIG))
         .filter(|config| config.is_file());
     if let Some(config) = config_dir_config {
-        tasks.extend(tasks_from_file(config)?);
+        tasks.push(tasks_from_file(config)?);
     }
 
     Ok(tasks)
@@ -341,6 +364,27 @@ fn next_key_event() -> KeyEvent {
     }
 }
 
+enum TaskOrGroup<'a> {
+    Task(&'a Task),
+    Group(&'a Group),
+}
+
+impl<'a> TaskOrGroup<'a> {
+    fn key(&'a self) -> char {
+        match self {
+            TaskOrGroup::Group(g) => g.key,
+            TaskOrGroup::Task(t) => t.key,
+        }
+    }
+
+    fn name(&'a self) -> &str {
+        match self {
+            TaskOrGroup::Group(g) => &g.name,
+            TaskOrGroup::Task(t) => &t.name,
+        }
+    }
+}
+
 /// Presents a user with the list of tasks and reads the selected task
 fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Option<&'a Task>> {
     let mut stack = vec![group];
@@ -355,8 +399,8 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
             println!("  {}", status);
             println!();
         }
-        let tasks = &stack.last().unwrap().children;
-        if !tasks.is_empty() {
+        let current_group = *stack.last().unwrap();
+        if !current_group.is_empty() {
             print!("  {}", "SELECT A TASK".stylize().grey());
             if stack.len() > 1 {
                 let breadcrumbs = stack[1..]
@@ -369,7 +413,7 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
             println!();
             println!();
 
-            draw_tasks(tasks)?;
+            draw_tasks(current_group)?;
         } else {
             println!("    {}", "No tasks configured".stylize().bold());
             println!("    Create file {} in the current directory", TTR_CONFIG);
@@ -389,42 +433,54 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
         let KeyEvent {
             code, modifiers, ..
         } = next_key_event();
-        let task = match code {
+        let reason = match code {
             KeyCode::Char('q') => return Ok(None),
             KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => return Ok(None),
-            KeyCode::Char(' ') => Err("Whitespace is not allowed".to_string()),
-            KeyCode::Backspace | KeyCode::Esc if stack.len() <= 1 => {
-                Err("This is the root".to_string())
-            }
+            KeyCode::Char(' ') => "Whitespace is not allowed".to_string(),
+            KeyCode::Backspace | KeyCode::Esc if stack.len() <= 1 => "This is the root".to_string(),
             KeyCode::Backspace | KeyCode::Esc if stack.len() > 1 => {
                 stack.pop();
                 continue;
             }
-            KeyCode::Char(ch) => tasks
-                .iter()
-                .find(|t| t.key() == ch)
-                .ok_or(format!("No task for key: {}", ch)),
-            _ => Err("Please enter character key".to_string()),
-        };
-        match task {
-            Ok(TaskOrGroup::Task(task)) => return Ok(Some(task)),
-            Ok(TaskOrGroup::Group(group)) => {
-                stack.push(group);
-                continue;
+            KeyCode::Char(ch) => {
+                let task = current_group.tasks.iter().find(|t| t.key == ch);
+                if let Some(task) = task {
+                    return Ok(Some(task));
+                }
+                let next_group = current_group.groups.iter().find(|g| g.key == ch);
+                if let Some(next_group) = next_group {
+                    stack.push(next_group);
+                    continue;
+                }
+                format!("No task for key: {}", ch)
             }
-            Err(reason) => error = Some(reason),
+            _ => "Please enter character key".to_string(),
         };
+        error = Some(reason)
     }
 }
 
-fn draw_tasks(tasks: &Vec<TaskOrGroup>) -> Result<()> {
+fn draw_tasks(group: &Group) -> Result<()> {
+    let mut positions: Vec<TaskOrGroup> = vec![];
+    let groups = group
+        .groups
+        .iter()
+        .map(TaskOrGroup::Group)
+        .collect::<Vec<_>>();
+    positions.extend(groups);
+    let tasks = group
+        .tasks
+        .iter()
+        .map(TaskOrGroup::Task)
+        .collect::<Vec<_>>();
+    positions.extend(tasks);
     let (width, _) = crossterm::terminal::size()?;
     // 4 characters is a padding from screen edge
     // 20 is width of one task representation
     let columns_fit = (width as usize - 4) / 20;
-    let rows = (tasks.len() + columns_fit - 1) / columns_fit;
-    let columns = tasks.chunks(rows).collect::<Vec<_>>();
-    Ok(for i in 0..rows {
+    let rows = (positions.len() + columns_fit - 1) / columns_fit;
+    let columns = positions.chunks(rows).collect::<Vec<_>>();
+    for i in 0..rows {
         print!("  ");
         for column in &columns {
             let Some(task) = column.get(i) else {
@@ -438,7 +494,8 @@ fn draw_tasks(tasks: &Vec<TaskOrGroup>) -> Result<()> {
             print!("  {} → {:12}  ", task.key().stylize().green().bold(), name);
         }
         println!();
-    })
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -448,43 +505,42 @@ mod tests {
 
     #[test]
     fn check_yaml_serialization() {
-        let yaml = "!Group
-            name: foo
-            key: f
-            children:
-            - !Task
-                name: foo
+        let yaml = "
+            name: name
+            key: c
+            groups:
+            - name: foo
+              key: f
+              tasks:
+              - name: foo
                 cmd: foo
                 key: b
         ";
-        let group: TaskOrGroup = serde_yaml::from_str(yaml).unwrap();
-        let TaskOrGroup::Group(g) = group else {
-            panic!("No group found");
-        };
-        assert_eq!(1, g.children.len());
+        let group: Group = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(1, group.groups.len());
     }
 
     #[test]
     fn check_iteration() {
-        let yaml = "!Group
-            name: foo
-            key: f
-            children:
-            - !Task
-                name: bar
+        let yaml = "
+            name: name
+            key: c
+            groups:
+            - name: foo
+              key: f
+              tasks:
+              - name: bar
                 cmd: --
                 key: b
-            - !Group
-                name: baz
-                key: u
-                children:
-                - !Task
-                    name: boo
-                    key: o
-                    cmd: --
+            - name: boo
+              key: u
+              tasks:
+              - name: boo
+                key: o
+                cmd: '--'
         ";
-        let mut group: TaskOrGroup = serde_yaml::from_str(yaml).unwrap();
+        let mut group: Group = serde_yaml::from_str(yaml).unwrap();
         let names: Vec<_> = group.iter_mut().map(|s| s.name.as_str()).collect();
-        assert_eq!(vec!["bar", "boo"], names);
+        assert_eq!(vec!["boo", "bar"], names);
     }
 }
