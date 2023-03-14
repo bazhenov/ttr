@@ -84,48 +84,44 @@ impl TaskOrGroup {
     ///
     /// Returns iterator over tuple of [`TaskOrGroup`] and path from the root
     /// to the element in an [`Vec`] form
-    fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a TaskOrGroup, Vec<&'a Group>)> {
-        TaskIterator {
-            root: Some(self),
-            stack: vec![],
+    fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Task> {
+        match self {
+            TaskOrGroup::Group(g) => TaskIterator {
+                tasks: vec![],
+                groups: vec![g],
+            },
+            TaskOrGroup::Task(t) => TaskIterator {
+                tasks: vec![t],
+                groups: vec![],
+            },
         }
     }
 }
 
 struct TaskIterator<'a> {
-    root: Option<&'a TaskOrGroup>,
-    stack: Vec<(usize, &'a Group)>,
+    groups: Vec<&'a mut Group>,
+    tasks: Vec<&'a mut Task>,
 }
 
 impl<'a> Iterator for TaskIterator<'a> {
-    type Item = (&'a TaskOrGroup, Vec<&'a Group>);
+    type Item = &'a mut Task;
 
     fn next(&mut self) -> Option<Self::Item> {
-        fn breadcrumbs<'a, T>(input: &[(T, &'a Group)]) -> Vec<&'a Group> {
-            input.iter().map(|(_, b)| *b).collect()
-        }
-
-        if let Some(item) = self.root.take() {
-            if let TaskOrGroup::Group(g) = item {
-                self.stack.push((0, g));
+        loop {
+            if let Some(task) = self.tasks.pop() {
+                return Some(task);
             }
-            return Some((item, vec![]));
-        }
-        'next_element: loop {
-            let Some((pos, group)) = self.stack.last_mut() else {
+
+            let Some(group) = self.groups.pop() else {
                 return None;
             };
-            let Some(child) = group.children.get(*pos) else {
-                self.stack.pop();
-                continue 'next_element;
-            };
-
-            *pos += 1;
-            let breadcrumbs = breadcrumbs(&self.stack);
-            if let TaskOrGroup::Group(g) = child {
-                self.stack.push((0, g));
+            for child in group.children.iter_mut() {
+                match child {
+                    TaskOrGroup::Group(g) => self.groups.push(g),
+                    TaskOrGroup::Task(t) => self.tasks.push(t),
+                }
             }
-            return Some((child, breadcrumbs));
+            continue;
         }
     }
 }
@@ -275,9 +271,11 @@ fn read_tasks() -> Result<Vec<TaskOrGroup>> {
         // working directories if provided interpreted as relative to the file they are defined in
         let context_dir = path.as_ref().parent();
         for task in config.iter_mut() {
-            // if let Some(working_dir) = &task.working_dir {
-            //     task.working_dir = context_dir.map(|p| p.join(working_dir));
-            // }
+            for t in task.iter_mut() {
+                if let Some(working_dir) = &t.working_dir {
+                    t.working_dir = context_dir.map(|p| p.join(working_dir));
+                }
+            }
         }
         Ok(config)
     }
@@ -485,24 +483,8 @@ mod tests {
                     key: o
                     cmd: --
         ";
-        let group: TaskOrGroup = serde_yaml::from_str(yaml).unwrap();
-
-        fn build_breadcrumbs(input: &[&Group]) -> String {
-            let strings = input.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
-            strings.join(" > ")
-        }
-        let names: Vec<_> = group
-            .iter()
-            .map(|(i, b)| (i.name(), build_breadcrumbs(&b)))
-            .collect();
-        assert_eq!(
-            vec![
-                ("foo", "".to_string()),
-                ("bar", "foo".to_string()),
-                ("baz", "foo".to_string()),
-                ("boo", "foo > baz".to_string()),
-            ],
-            names
-        );
+        let mut group: TaskOrGroup = serde_yaml::from_str(yaml).unwrap();
+        let names: Vec<_> = group.iter_mut().map(|s| s.name.as_str()).collect();
+        assert_eq!(vec!["bar", "boo"], names);
     }
 }
