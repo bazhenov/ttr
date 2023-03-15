@@ -4,7 +4,7 @@ The idea behind `ttr` is the same as behind Vim [WhichKey](https://github.com/fo
 
 The main difference is ttr doesn't depend on any editor and works right in the shell.
 
-![](img/example.png)
+![](img/movie.gif)
 
 ## Features
 
