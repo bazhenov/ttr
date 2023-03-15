@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.os}}
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Install Rust
       run: rustup update stable && rustup default stable
 
@@ -59,14 +59,14 @@ jobs:
     - name: Release SHA256 checksum
       run: |
         shasum -a 256 ${{ env.RELEASE_FQN }}.tar.gz
-        
+
     - name: Create .deb release
       if: matrix.os == 'ubuntu-20.04'
       run: |
         mkdir -p ${{ env.RELEASE_FQN }}/usr/local
         mkdir -p ${{ env.RELEASE_FQN }}/DEBIAN
         cp -r release/bin ${{ env.RELEASE_FQN }}/usr/local
-        cat deb/control | sed 's/__VERSION__/0.1.0/' > ${{ env.RELEASE_FQN }}/DEBIAN/control
+        cat deb/control | sed 's/__VERSION__/${{ github.ref_name }}/' > ${{ env.RELEASE_FQN }}/DEBIAN/control
         dpkg-deb --build --root-owner-group ${{ env.RELEASE_FQN }}
         rm -rf ${{ env.RELEASE_FQN }}
 
@@ -79,7 +79,7 @@ jobs:
         asset_path: ${{ env.RELEASE_FQN }}.tar.gz
         asset_name: ${{ env.RELEASE_FQN }}.tar.gz
         asset_content_type: application/octet-stream
-    
+
     - name: Upload .deb release archive
       if: matrix.os == 'ubuntu-20.04'
       uses: actions/upload-release-asset@v1.0.2
