@@ -232,8 +232,8 @@ fn confirm_task(exit_status: ExitStatus) -> NextAction {
 ///
 /// The earlier task will win and the latter will be removed from the result
 fn merge_groups(groups: Vec<Group>) -> Group {
-    let mut new_tasks: HashMap<char, Task> = HashMap::new();
-    let mut new_groups: HashMap<char, Vec<Group>> = HashMap::new();
+    let mut tasks: HashMap<char, Task> = HashMap::new();
+    let mut similar_groups: HashMap<char, Vec<Group>> = HashMap::new();
     let Some(first_group) = groups.get(0) else {
         return Group::default();
     };
@@ -247,30 +247,34 @@ fn merge_groups(groups: Vec<Group>) -> Group {
     if groups.len() == 1 {
         return groups.swap_remove(0);
     }
-    for g in groups.into_iter() {
-        for group in g.groups.into_iter() {
-            new_groups
-                .entry(group.key)
+    for group in groups.into_iter() {
+        for child_group in group.groups.into_iter() {
+            similar_groups
+                .entry(child_group.key)
                 .or_insert_with(Vec::new)
-                .push(group)
+                .push(child_group)
         }
 
-        for task in g.tasks.into_iter() {
-            new_tasks.entry(task.key).or_insert(task);
+        for task in group.tasks.into_iter() {
+            if similar_groups.contains_key(&task.key) {
+                // key is already binded to a group
+                continue;
+            }
+            tasks.entry(task.key).or_insert(task);
         }
     }
 
-    let mut groups = vec![];
-    for (_, defs) in new_groups {
-        groups.push(merge_groups(defs));
-    }
+    let merged_groups = similar_groups
+        .into_values()
+        .map(merge_groups)
+        .collect::<Vec<_>>();
+    let merged_tasks = tasks.into_values().collect::<Vec<_>>();
 
-    let tasks = new_tasks.into_values().collect::<Vec<_>>();
     Group {
         name: group_name,
         key: group_key,
-        groups,
-        tasks,
+        groups: merged_groups,
+        tasks: merged_tasks,
     }
 }
 
@@ -365,23 +369,23 @@ fn next_key_event() -> KeyEvent {
     }
 }
 
-enum TaskOrGroup<'a> {
+enum DrawItem<'a> {
     Task(&'a Task),
     Group(&'a Group),
 }
 
-impl<'a> TaskOrGroup<'a> {
+impl<'a> DrawItem<'a> {
     fn key(&'a self) -> char {
         match self {
-            TaskOrGroup::Group(g) => g.key,
-            TaskOrGroup::Task(t) => t.key,
+            DrawItem::Group(g) => g.key,
+            DrawItem::Task(t) => t.key,
         }
     }
 
     fn name(&'a self) -> &str {
         match self {
-            TaskOrGroup::Group(g) => &g.name,
-            TaskOrGroup::Task(t) => &t.name,
+            DrawItem::Group(g) => &g.name,
+            DrawItem::Task(t) => &t.name,
         }
     }
 }
@@ -462,37 +466,34 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
 }
 
 fn draw_tasks(group: &Group) -> Result<()> {
-    let mut positions: Vec<TaskOrGroup> = vec![];
-    let groups = group
-        .groups
-        .iter()
-        .map(TaskOrGroup::Group)
-        .collect::<Vec<_>>();
-    positions.extend(groups);
-    let tasks = group
-        .tasks
-        .iter()
-        .map(TaskOrGroup::Task)
-        .collect::<Vec<_>>();
-    positions.extend(tasks);
+    let groups = group.groups.iter().map(DrawItem::Group);
+    let tasks = group.tasks.iter().map(DrawItem::Task);
+    let draw_items = Vec::from_iter(groups.chain(tasks));
+
     let (width, _) = crossterm::terminal::size()?;
     // 4 characters is a padding from screen edge
     // 20 is width of one task representation
     let columns_fit = (width as usize - 4) / 20;
-    let rows = (positions.len() + columns_fit - 1) / columns_fit;
-    let columns = positions.chunks(rows).collect::<Vec<_>>();
+    let rows = (draw_items.len() + columns_fit - 1) / columns_fit;
+    let columns = draw_items.chunks(rows).collect::<Vec<_>>();
     for i in 0..rows {
         print!("  ");
         for column in &columns {
-            let Some(task) = column.get(i) else {
+            let Some(item) = column.get(i) else {
                 break;
             };
-            let name = if task.name().len() > 12 {
-                format!("{}…", task.name().chars().take(11).collect::<String>())
+            let name = if item.name().len() > 12 {
+                format!("{}…", item.name().chars().take(11).collect::<String>())
             } else {
-                task.name().to_string()
+                item.name().to_string()
             };
-            print!("  {} → {:12}  ", task.key().stylize().green().bold(), name);
+            let key = item.key().stylize().bold();
+            let key = if let DrawItem::Group(_) = item {
+                key.dark_blue()
+            } else {
+                key.green()
+            };
+            print!(" {key} → {name:12}  ", key = key, name = name);
         }
         println!();
     }
