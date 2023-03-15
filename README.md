@@ -26,8 +26,8 @@ $ brew install bazhenov/tap/ttr
 ### Linux (.deb)
 
 ```console
-$ cur -OL ...
-$ deb -i ttr-0.2.0-x86_64-linux.deb
+$ cur -OL https://github.com/bazhenov/ttr/releases/download/0.3.0/ttr-0.3.0-x86_64-unknown-linux-gnu.deb
+$ dpkg -i ttr-0.3.0-x86_64-unknown-linux-gnu.deb
 ```
 
 ### Building from sources
