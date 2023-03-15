@@ -9,7 +9,10 @@ The main difference is ttr doesn't depend on any editor and works right in the s
 ## Features
 
 * supports project-local as well as global tasks
+* task groups to keep memorable mnemonics for tasks (`ct` for `cargo test` etc.)
 * confirmation after exit for non interactive applications
+* loop-mode allows quickly select next task after previous completed
+* ability to clear terminal before task run
 * simple yaml configuration
 
 ## Installation
@@ -39,7 +42,7 @@ $ cargo install --git=https://github.com/bazhenov/ttr.git
 
 `ttr` looks for a `.ttr.yaml` file in following directories:
 
-* current working directory;
+* current working directory and parent directories till the home dir (like a git);
 * home directory;
 * config directory (`$XDG_CONFIG_HOME` or `.config/ttr` on Linux and `~/Library/Application Support/ttr` on macOS).
 
@@ -48,15 +51,27 @@ Tasks from all files are merged together. Prirority is given to task defined ear
 Configuration example:
 
 ```yaml
-- name: lazygit
+groups:
+- name: git
   key: g
-  cmd: lazygit
-
-- name: test
-  key: t
-  cmd: cargo test
-  confirm: true # displays confirmation after command exited
-  clear: true # clears terminal before running command
+  tasks:
+  - name: lazygit
+    key: g
+    cmd: lazygit
+  - name: git diff
+    key: d
+    cmd: git diff
+- name: cargo
+  key: c
+  tasks:
+  - name: test
+    key: t
+    cmd: cargo test
+    confirm: true # displays confirmation after command exited
+    clear: true # clears terminal before running command
+  - name: run
+    key: r
+    cmd: cargo run
 ```
 
 ## Integration with terminals
