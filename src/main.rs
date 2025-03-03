@@ -350,12 +350,13 @@ fn create_process(task: &Task) -> Result<Child> {
         .current_dir(working_dir)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .envs(&task.env);
+        .stderr(Stdio::inherit());
 
     if task.clear_env {
         child.env_clear();
     }
+
+    child.envs(&task.env);
 
     Ok(child.spawn()?)
 }
