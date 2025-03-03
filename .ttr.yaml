@@ -1,36 +1,37 @@
-- name: date
-  key: d
-  cmd: date
+tasks:
+  - name: date
+    key: d
+    cmd: date
 
-- name: date w. confirm
-  key: D
-  cmd: date
-  confirm: true
-  clear: true
+  - name: date w. confirm
+    key: D
+    cmd: date
+    confirm: true
+    clear: true
 
-- name: fzf (intentionally very long task name)
-  key: f
-  cmd: fzf --preview "bat {}"
+  - name: fzf (intentionally very long task name)
+    key: f
+    cmd: fzf --preview "bat {}"
 
-- name: fail
-  key: F
-  cmd: 'false'
+  - name: fail
+    key: F
+    cmd: "false"
 
-- name: find/src
-  key: S
-  cmd: find .
-  working_dir: src/
-  confirm: true
+  - name: find/src
+    key: S
+    cmd: find .
+    working_dir: src/
+    confirm: true
 
-- name: cargo install
-  key: I
-  cmd: cargo install --path=.
+  - name: cargo install
+    key: I
+    cmd: cargo install --path=.
 
-- name: vim
-  key: v
-  cmd: nvim
+  - name: vim
+    key: v
+    cmd: nvim
 
-- name: not-existent
-  key: n
-  cmd: foobar --hello
-  clear: true
+  - name: not-existent
+    key: n
+    cmd: foobar --hello
+    clear: true
