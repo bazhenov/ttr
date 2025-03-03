@@ -46,7 +46,7 @@ $ cargo install --git=https://github.com/bazhenov/ttr.git
 * home directory;
 * config directory (`$XDG_CONFIG_HOME` or `.config/ttr` on Linux and `~/Library/Application Support/ttr` on macOS).
 
-Tasks from all files are merged together. Prirority is given to task defined earlier.
+Tasks from all files are merged together. Priority is given to task defined earlier.
 
 Configuration example:
 
