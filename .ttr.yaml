@@ -35,3 +35,9 @@ tasks:
     key: n
     cmd: foobar --hello
     clear: true
+
+  - name: echo env var
+    key: e
+    env:
+      SOME_KEY: "some value"
+    cmd: echo "The value of SOME_KEY is '$SOME_KEY'"

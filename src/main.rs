@@ -50,6 +50,10 @@ struct Task {
     #[serde(default)]
     clear: bool,
     working_dir: Option<PathBuf>,
+    #[serde(default)]
+    env: HashMap<String, String>,
+    #[serde(default)]
+    clear_env: bool,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -341,14 +345,19 @@ fn read_tasks() -> Result<Vec<Group>> {
 fn create_process(task: &Task) -> Result<Child> {
     let current_dir = current_dir()?;
     let working_dir = task.working_dir.as_ref().unwrap_or(&current_dir);
-    let child = Command::new("sh")
-        .args(["-c", &format!("exec {}", task.cmd)])
+    let mut child = Command::new("sh");
+    child.args(["-c", &format!("exec {}", task.cmd)])
         .current_dir(working_dir)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .spawn()?;
-    Ok(child)
+        .envs(&task.env);
+
+    if task.clear_env {
+        child.env_clear();
+    }
+
+    Ok(child.spawn()?)
 }
 
 fn next_key_event() -> KeyEvent {
