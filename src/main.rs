@@ -93,15 +93,9 @@ impl<'a> Iterator for TaskIterator<'a> {
                 return Some(task);
             }
 
-            let Some(group) = self.groups.pop() else {
-                return None;
-            };
-            for task in group.tasks.iter_mut() {
-                self.tasks.push(task)
-            }
-            for task in group.groups.iter_mut() {
-                self.groups.push(task)
-            }
+            let group = self.groups.pop()?;
+            self.tasks.extend(group.tasks.iter_mut());
+            self.groups.extend(group.groups.iter_mut());
             continue;
         }
     }
@@ -154,7 +148,7 @@ fn main() -> Result<()> {
     let mut status_line: Option<String> = None;
     'select_loop: loop {
         let Some(task) = select_task(&tasks, &status_line)? else {
-            return Ok(())
+            return Ok(());
         };
 
         'task_loop: loop {
@@ -234,7 +228,7 @@ fn confirm_task(exit_status: ExitStatus) -> NextAction {
 fn merge_groups(groups: Vec<Group>) -> Group {
     let mut tasks: HashMap<char, Task> = HashMap::new();
     let mut similar_groups: HashMap<char, Vec<Group>> = HashMap::new();
-    let Some(first_group) = groups.get(0) else {
+    let Some(first_group) = groups.first() else {
         return Group::default();
     };
     let group_name = first_group.name.clone();
@@ -251,7 +245,7 @@ fn merge_groups(groups: Vec<Group>) -> Group {
         for child_group in group.groups.into_iter() {
             similar_groups
                 .entry(child_group.key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(child_group)
         }
 
@@ -375,14 +369,14 @@ enum DrawItem<'a> {
 }
 
 impl<'a> DrawItem<'a> {
-    fn key(&'a self) -> char {
+    fn key(&self) -> char {
         match self {
             DrawItem::Group(g) => g.key,
             DrawItem::Task(t) => t.key,
         }
     }
 
-    fn name(&'a self) -> &str {
+    fn name(&'a self) -> &'a str {
         match self {
             DrawItem::Group(g) => &g.name,
             DrawItem::Task(t) => &t.name,
@@ -474,7 +468,7 @@ fn draw_tasks(group: &Group) -> Result<()> {
     // 4 characters is a padding from screen edge
     // 20 is width of one task representation
     let columns_fit = (width as usize - 4) / 20;
-    let rows = (draw_items.len() + columns_fit - 1) / columns_fit;
+    let rows = draw_items.len().div_ceil(columns_fit);
     let columns = draw_items.chunks(rows).collect::<Vec<_>>();
     for i in 0..rows {
         print!("  ");
