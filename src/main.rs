@@ -159,7 +159,7 @@ fn main() -> Result<()> {
             if task.clear || opts.clear {
                 execute!(stdout(), Clear(ClearType::All), cursor::MoveTo(0, 0))?;
             }
-            let exit_status = create_process(task)?.wait()?;
+            let exit_status = create_process(task, true)?.wait()?;
             status_line = Some(format_status_line(task, exit_status));
 
             if !exit_status.success() || task.confirm || opts.confirm {
@@ -342,15 +342,15 @@ fn read_tasks() -> Result<Vec<Group>> {
     Ok(tasks)
 }
 
-fn create_process(task: &Task) -> Result<Child> {
+fn create_process(task: &Task, inherit_stdio: bool) -> Result<Child> {
     let current_dir = current_dir()?;
     let working_dir = task.working_dir.as_ref().unwrap_or(&current_dir);
     let mut child = Command::new("sh");
     child.args(["-c", &format!("exec {}", task.cmd)])
         .current_dir(working_dir)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stdin(if inherit_stdio { Stdio::inherit() } else { Stdio::piped() })
+        .stdout(if inherit_stdio { Stdio::inherit() } else { Stdio::piped() })
+        .stderr(if inherit_stdio { Stdio::inherit() } else { Stdio::piped() });
 
     if task.clear_env {
         child.env_clear();
@@ -564,7 +564,7 @@ mod tests {
 
         let task: Task = serde_yaml::from_str(yaml).unwrap();
 
-        let output = create_process(&task).unwrap().wait_with_output().unwrap();
+        let output = create_process(&task, false).unwrap().wait_with_output().unwrap();
 
         assert_eq!("The value of FOO is bar and GLOBAL_VAR_123 is present", String::from_utf8_lossy(&output.stdout));
     }
@@ -584,7 +584,7 @@ mod tests {
 
         let task: Task = serde_yaml::from_str(yaml).unwrap();
 
-        let output = create_process(&task).unwrap().wait_with_output().unwrap();
+        let output = create_process(&task, false).unwrap().wait_with_output().unwrap();
 
         assert_eq!("The value of FOO is bar and GLOBAL_VAR_234 is ", String::from_utf8_lossy(&output.stdout));
     }
