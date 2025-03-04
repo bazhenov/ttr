@@ -349,8 +349,8 @@ fn create_process(task: &Task) -> Result<Child> {
     child.args(["-c", &format!("exec {}", task.cmd)])
         .current_dir(working_dir)
         .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     if task.clear_env {
         child.env_clear();
@@ -506,7 +506,7 @@ fn draw_tasks(group: &Group) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-
+    use std::env::{set_var};
     use super::*;
 
     #[test]
@@ -548,5 +548,44 @@ mod tests {
         let mut group: Group = serde_yaml::from_str(yaml).unwrap();
         let names: Vec<_> = group.iter_mut().map(|s| s.name.as_str()).collect();
         assert_eq!(vec!["boo", "bar"], names);
+    }
+
+    #[test]
+    fn check_env_config_without_clear() {
+        set_var("GLOBAL_VAR_123", "present");
+
+        let yaml = "
+            name: bar
+            key: b
+            env:
+              FOO: bar
+            cmd: echo -n \"The value of FOO is $FOO and GLOBAL_VAR_123 is $GLOBAL_VAR_123\"
+        ";
+
+        let task: Task = serde_yaml::from_str(yaml).unwrap();
+
+        let output = create_process(&task).unwrap().wait_with_output().unwrap();
+
+        assert_eq!("The value of FOO is bar and GLOBAL_VAR_123 is present", String::from_utf8_lossy(&output.stdout));
+    }
+
+    #[test]
+    fn check_env_config_with_clear() {
+        set_var("GLOBAL_VAR_234", "global");
+
+        let yaml = "
+            name: bar
+            key: b
+            env:
+              FOO: bar
+            clear_env: true
+            cmd: echo -n \"The value of FOO is $FOO and GLOBAL_VAR_234 is $GLOBAL_VAR_234\"
+        ";
+
+        let task: Task = serde_yaml::from_str(yaml).unwrap();
+
+        let output = create_process(&task).unwrap().wait_with_output().unwrap();
+
+        assert_eq!("The value of FOO is bar and GLOBAL_VAR_234 is ", String::from_utf8_lossy(&output.stdout));
     }
 }
