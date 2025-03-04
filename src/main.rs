@@ -506,7 +506,7 @@ fn draw_tasks(group: &Group) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::env::{set_var};
+    use std::env::{remove_var, set_var};
     use super::*;
 
     #[test]
@@ -566,6 +566,8 @@ mod tests {
 
         let output = create_process(&task, false).unwrap().wait_with_output().unwrap();
 
+        remove_var("GLOBAL_VAR_123");
+
         assert_eq!("The value of FOO is bar and GLOBAL_VAR_123 is present", String::from_utf8_lossy(&output.stdout));
     }
 
@@ -585,6 +587,8 @@ mod tests {
         let task: Task = serde_yaml::from_str(yaml).unwrap();
 
         let output = create_process(&task, false).unwrap().wait_with_output().unwrap();
+
+        remove_var("GLOBAL_VAR_234");
 
         assert_eq!("The value of FOO is bar and GLOBAL_VAR_234 is ", String::from_utf8_lossy(&output.stdout));
     }
