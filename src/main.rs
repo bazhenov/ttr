@@ -159,7 +159,7 @@ fn main() -> Result<()> {
             if task.clear || opts.clear {
                 execute!(stdout(), Clear(ClearType::All), cursor::MoveTo(0, 0))?;
             }
-            let exit_status = create_process(task)?.wait()?;
+            let exit_status = create_process(task, true)?.wait()?;
             status_line = Some(format_status_line(task, exit_status));
 
             if !exit_status.success() || task.confirm || opts.confirm {
@@ -342,20 +342,34 @@ fn read_tasks() -> Result<Vec<Group>> {
     Ok(tasks)
 }
 
-fn create_process(task: &Task) -> Result<Child> {
+fn create_process(task: &Task, inherit_stdio: bool) -> Result<Child> {
     let current_dir = current_dir()?;
     let working_dir = task.working_dir.as_ref().unwrap_or(&current_dir);
     let mut child = Command::new("sh");
-    child.args(["-c", &format!("exec {}", task.cmd)])
+    child
+        .args(["-c", &format!("exec {}", task.cmd)])
         .current_dir(working_dir)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .envs(&task.env);
+        .stdin(if inherit_stdio {
+            Stdio::inherit()
+        } else {
+            Stdio::piped()
+        })
+        .stdout(if inherit_stdio {
+            Stdio::inherit()
+        } else {
+            Stdio::piped()
+        })
+        .stderr(if inherit_stdio {
+            Stdio::inherit()
+        } else {
+            Stdio::piped()
+        });
 
     if task.clear_env {
         child.env_clear();
     }
+
+    child.envs(&task.env);
 
     Ok(child.spawn()?)
 }
@@ -505,8 +519,8 @@ fn draw_tasks(group: &Group) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+    use std::env::{remove_var, set_var};
 
     #[test]
     fn check_yaml_serialization() {
@@ -547,5 +561,84 @@ mod tests {
         let mut group: Group = serde_yaml::from_str(yaml).unwrap();
         let names: Vec<_> = group.iter_mut().map(|s| s.name.as_str()).collect();
         assert_eq!(vec!["boo", "bar"], names);
+    }
+
+    #[test]
+    fn check_env_config_without_clear() {
+        let _env_var = session_env_var("GLOBAL_VAR_123", "present");
+
+        let task = Task {
+            name: "bar".to_string(),
+            key: 'b',
+            cmd: "echo -n \"The value of FOO is $FOO and GLOBAL_VAR_123 is $GLOBAL_VAR_123\""
+                .to_string(),
+            confirm: false,
+            clear: false,
+            working_dir: None,
+            env: [("FOO".to_string(), "bar".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+            clear_env: false,
+        };
+
+        let output = create_process(&task, false)
+            .unwrap()
+            .wait_with_output()
+            .unwrap();
+
+        assert_eq!(
+            "The value of FOO is bar and GLOBAL_VAR_123 is present",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+
+    #[test]
+    fn check_env_config_with_clear() {
+        let _env_var = session_env_var("GLOBAL_VAR_234", "global");
+
+        let task = Task {
+            name: "bar".to_string(),
+            key: 'b',
+            cmd: "echo -n \"The value of FOO is $FOO and GLOBAL_VAR_234 is $GLOBAL_VAR_234\""
+                .to_string(),
+            confirm: false,
+            clear: false,
+            working_dir: None,
+            env: [("FOO".to_string(), "bar".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+            clear_env: true,
+        };
+
+        let output = create_process(&task, false)
+            .unwrap()
+            .wait_with_output()
+            .unwrap();
+
+        assert_eq!(
+            "The value of FOO is bar and GLOBAL_VAR_234 is ",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+
+    fn session_env_var(name: impl Into<String>, value: impl Into<String>) -> EnvVar {
+        let name = name.into();
+        let value = value.into();
+
+        set_var(&name, value.as_str());
+
+        EnvVar { name }
+    }
+
+    struct EnvVar {
+        name: String,
+    }
+
+    impl Drop for EnvVar {
+        fn drop(&mut self) {
+            remove_var(&self.name)
+        }
     }
 }
