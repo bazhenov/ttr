@@ -346,11 +346,24 @@ fn create_process(task: &Task, inherit_stdio: bool) -> Result<Child> {
     let current_dir = current_dir()?;
     let working_dir = task.working_dir.as_ref().unwrap_or(&current_dir);
     let mut child = Command::new("sh");
-    child.args(["-c", &format!("exec {}", task.cmd)])
+    child
+        .args(["-c", &format!("exec {}", task.cmd)])
         .current_dir(working_dir)
-        .stdin(if inherit_stdio { Stdio::inherit() } else { Stdio::piped() })
-        .stdout(if inherit_stdio { Stdio::inherit() } else { Stdio::piped() })
-        .stderr(if inherit_stdio { Stdio::inherit() } else { Stdio::piped() });
+        .stdin(if inherit_stdio {
+            Stdio::inherit()
+        } else {
+            Stdio::piped()
+        })
+        .stdout(if inherit_stdio {
+            Stdio::inherit()
+        } else {
+            Stdio::piped()
+        })
+        .stderr(if inherit_stdio {
+            Stdio::inherit()
+        } else {
+            Stdio::piped()
+        });
 
     if task.clear_env {
         child.env_clear();
@@ -506,8 +519,8 @@ fn draw_tasks(group: &Group) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::env::{remove_var, set_var};
     use super::*;
+    use std::env::{remove_var, set_var};
 
     #[test]
     fn check_yaml_serialization() {
@@ -552,44 +565,80 @@ mod tests {
 
     #[test]
     fn check_env_config_without_clear() {
-        set_var("GLOBAL_VAR_123", "present");
+        let _env_var = session_env_var("GLOBAL_VAR_123", "present");
 
-        let yaml = "
-            name: bar
-            key: b
-            env:
-              FOO: bar
-            cmd: echo -n \"The value of FOO is $FOO and GLOBAL_VAR_123 is $GLOBAL_VAR_123\"
-        ";
+        let task = Task {
+            name: "bar".to_string(),
+            key: 'b',
+            cmd: "echo -n \"The value of FOO is $FOO and GLOBAL_VAR_123 is $GLOBAL_VAR_123\""
+                .to_string(),
+            confirm: false,
+            clear: false,
+            working_dir: None,
+            env: [("FOO".to_string(), "bar".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+            clear_env: false,
+        };
 
-        let task: Task = serde_yaml::from_str(yaml).unwrap();
+        let output = create_process(&task, false)
+            .unwrap()
+            .wait_with_output()
+            .unwrap();
 
-        let output = create_process(&task, false).unwrap().wait_with_output().unwrap();
-
-        remove_var("GLOBAL_VAR_123");
-
-        assert_eq!("The value of FOO is bar and GLOBAL_VAR_123 is present", String::from_utf8_lossy(&output.stdout));
+        assert_eq!(
+            "The value of FOO is bar and GLOBAL_VAR_123 is present",
+            String::from_utf8_lossy(&output.stdout)
+        );
     }
 
     #[test]
     fn check_env_config_with_clear() {
-        set_var("GLOBAL_VAR_234", "global");
+        let _env_var = session_env_var("GLOBAL_VAR_234", "global");
 
-        let yaml = "
-            name: bar
-            key: b
-            env:
-              FOO: bar
-            clear_env: true
-            cmd: echo -n \"The value of FOO is $FOO and GLOBAL_VAR_234 is $GLOBAL_VAR_234\"
-        ";
+        let task = Task {
+            name: "bar".to_string(),
+            key: 'b',
+            cmd: "echo -n \"The value of FOO is $FOO and GLOBAL_VAR_234 is $GLOBAL_VAR_234\""
+                .to_string(),
+            confirm: false,
+            clear: false,
+            working_dir: None,
+            env: [("FOO".to_string(), "bar".to_string())]
+                .iter()
+                .cloned()
+                .collect(),
+            clear_env: true,
+        };
 
-        let task: Task = serde_yaml::from_str(yaml).unwrap();
+        let output = create_process(&task, false)
+            .unwrap()
+            .wait_with_output()
+            .unwrap();
 
-        let output = create_process(&task, false).unwrap().wait_with_output().unwrap();
+        assert_eq!(
+            "The value of FOO is bar and GLOBAL_VAR_234 is ",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
 
-        remove_var("GLOBAL_VAR_234");
+    fn session_env_var(name: impl Into<String>, value: impl Into<String>) -> EnvVar {
+        let name = name.into();
+        let value = value.into();
 
-        assert_eq!("The value of FOO is bar and GLOBAL_VAR_234 is ", String::from_utf8_lossy(&output.stdout));
+        set_var(&name, value.as_str());
+
+        EnvVar { name }
+    }
+
+    struct EnvVar {
+        name: String,
+    }
+
+    impl Drop for EnvVar {
+        fn drop(&mut self) {
+            remove_var(&self.name)
+        }
     }
 }
