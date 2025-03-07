@@ -23,6 +23,10 @@ tasks:
     working_dir: src/
     confirm: true
 
+  - name: sleep
+    key: s
+    cmd: sleep 100
+
   - name: cargo install
     key: I
     cmd: cargo install --path=.

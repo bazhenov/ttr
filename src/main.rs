@@ -9,6 +9,10 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
+use nix::{
+    sys::signal::{self, Signal},
+    unistd::Pid,
+};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -17,6 +21,10 @@ use std::{
     io::stdout,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -149,6 +157,18 @@ fn main() -> Result<()> {
     let opts = Opts::parse();
     let tasks = merge_groups(read_tasks()?);
 
+    let running_pid = Arc::new(AtomicI32::new(0));
+    {
+        let running_pid = Arc::clone(&running_pid);
+        ctrlc::set_handler(move || {
+            // pid values are not dependent on each other. Therefore relaxed is enough
+            let pid = running_pid.load(Ordering::Relaxed);
+            if pid > 0 {
+                signal::kill(Pid::from_raw(pid), Signal::SIGINT).unwrap()
+            }
+        })?;
+    }
+
     let mut status_line: Option<String> = None;
     'select_loop: loop {
         let Some(task) = select_task(&tasks, &status_line)? else {
@@ -159,7 +179,12 @@ fn main() -> Result<()> {
             if task.clear || opts.clear {
                 execute!(stdout(), Clear(ClearType::All), cursor::MoveTo(0, 0))?;
             }
-            let exit_status = create_process(task, true)?.wait()?;
+            let mut process = create_process(task, true)?;
+
+            running_pid.store(process.id() as i32, Ordering::Relaxed);
+            let exit_status = process.wait()?;
+            running_pid.store(0, Ordering::Relaxed);
+
             status_line = Some(format_status_line(task, exit_status));
 
             if !exit_status.success() || task.confirm || opts.confirm {
@@ -457,14 +482,13 @@ fn select_task<'a>(group: &'a Group, status_line: &Option<String>) -> Result<Opt
         } = next_key_event();
         let reason = match code {
             KeyCode::Char('q') => return Ok(None),
-            KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => return Ok(None),
             KeyCode::Char(' ') => "Whitespace is not allowed".to_string(),
             KeyCode::Backspace | KeyCode::Esc if stack.len() <= 1 => "This is the root".to_string(),
             KeyCode::Backspace | KeyCode::Esc if stack.len() > 1 => {
                 stack.pop();
                 continue;
             }
-            KeyCode::Char(ch) => {
+            KeyCode::Char(ch) if modifiers != KeyModifiers::CONTROL => {
                 let task = current_group.tasks.iter().find(|t| t.key == ch);
                 if let Some(task) = task {
                     return Ok(Some(task));
