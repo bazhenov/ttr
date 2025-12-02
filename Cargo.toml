@@ -10,6 +10,6 @@ clap = {version = "4.1.6", features = ["derive"]}
 crossterm = "0.26.0"
 ctrlc = "3.4.5"
 dirs = "4.0.0"
-nix = "0.29.0"
+nix = {version="0.29.0", features = ["signal"]}
 serde = {version = "1.0.152", features = ["derive"]}
 serde_yaml = "0.9.17"
