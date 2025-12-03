@@ -5,11 +5,11 @@ version = "0.3.0"
 authors = ["Denis Bazhenov <dotsid@gmail.com>"]
 
 [dependencies]
-anyhow = "1.0.69"
-clap = {version = "4.1.6", features = ["derive"]}
-crossterm = "0.26.0"
-ctrlc = "3.4.5"
+anyhow = "1.0.100"
+clap = {version = "4.5.53", features = ["derive"]}
+crossterm = "0.26.1"
+ctrlc = "3.5.1"
 dirs = "4.0.0"
-nix = "0.29.0"
-serde = {version = "1.0.152", features = ["derive"]}
-serde_yaml = "0.9.17"
+nix = {version="0.29.0", features = ["signal"]}
+serde = {version = "1.0.228", features = ["derive"]}
+serde_yaml = "0.9.34"
