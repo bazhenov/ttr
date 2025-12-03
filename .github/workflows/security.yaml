@@ -1,0 +1,53 @@
+name: Security Scan
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read # Required to checkout the code
+  issues: write # Allows the action to comment on issues/PRs (optional, but useful)
+  pull-requests: write # Allows the action to comment on PRs (optional, but useful)
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # For checking out the repo
+      security-events: write # For uploading results to the Security tab
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs' # Scan the filesystem (repo)
+          scan-ref: '.' # Scan the current directory
+          format: 'sarif' # Use SARIF format for GitHub Code Scanning
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          name: TruffleHog Secret Scan
+
+  trufflehog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history to ensure a complete scan
+          fetch-depth: 0
+
+      - name: Run TruffleHog OSS
+        # Use the official TruffleHog action
+        uses: trufflesecurity/trufflehog@main
+        with:
+          # Scan only for verified secrets (fewer false positives)
+          extra_args: --results=verified,unknown
