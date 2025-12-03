@@ -11,7 +11,7 @@ on:
 jobs:
   create-release:
     name: create-release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.release.outputs.upload_url }}
     steps:
@@ -32,9 +32,9 @@ jobs:
       matrix:
         include:
         - target: x86_64-apple-darwin
-          os: macos-11
+          os: macos-latest
         - target: x86_64-unknown-linux-gnu
-          os: ubuntu-20.04
+          os: ubuntu-latest
     runs-on: ${{ matrix.os}}
     steps:
     - uses: actions/checkout@v3
@@ -61,7 +61,7 @@ jobs:
         shasum -a 256 ${{ env.RELEASE_FQN }}.tar.gz
 
     - name: Create .deb release
-      if: matrix.os == 'ubuntu-20.04'
+      if: matrix.os == 'ubuntu-latest'
       run: |
         mkdir -p ${{ env.RELEASE_FQN }}/usr/local
         mkdir -p ${{ env.RELEASE_FQN }}/DEBIAN
@@ -81,7 +81,7 @@ jobs:
         asset_content_type: application/octet-stream
 
     - name: Upload .deb release archive
-      if: matrix.os == 'ubuntu-20.04'
+      if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
