@@ -39,6 +39,35 @@ jobs:
       - name: Run cargo fmt check
         run: cargo fmt --all -- --check
 
+  spellcheck:
+    name: Spellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: codespell-project/actions-codespell@v1
+        with:
+          ignore_words_file: .codespellignore
+
+  linkcheck:
+    name: Markdown Link Check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: tcort/github-action-markdown-link-check@v1
+        with:
+          file: README.md
+
+  linkspector:
+    name: Linkspector
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: UmbrellaDocs/action-linkspector@v1
+        with:
+          args: README.md
+
   check-unused-deps:
     name: Unused dependencies
     runs-on: ubuntu-latest
