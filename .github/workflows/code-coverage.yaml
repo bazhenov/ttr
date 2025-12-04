@@ -2,9 +2,9 @@ name: Code Coverage
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   coverage:
@@ -30,8 +30,8 @@ jobs:
           path: cobertura.xml
 
       # Optional: Upload to Codecov
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: cobertura.xml
-          fail_ci_if_error: true
+      #- name: Upload to Codecov
+      #  uses: codecov/codecov-action@v5
+      #  with:
+      #    files: cobertura.xml
+      #    fail_ci_if_error: true
