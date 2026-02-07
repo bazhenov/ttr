@@ -8,12 +8,12 @@ The main difference is ttr doesn't depend on any editor and works right in the s
 
 ## Features
 
-* supports project-local as well as global tasks
-* task groups to keep memorable mnemonics for tasks (`ct` for `cargo test` etc.)
-* confirmation after exit for non interactive applications
-* loop-mode allows quickly select next task after previous completed
-* ability to clear terminal before task run
-* simple yaml configuration
+- supports project-local as well as global tasks
+- task groups to keep memorable mnemonics for tasks (`ct` for `cargo test` etc.)
+- confirmation after exit for non interactive applications
+- loop-mode allows quickly select next task after previous completed
+- ability to clear terminal before task run
+- simple yaml configuration
 
 ## Installation
 
@@ -23,11 +23,10 @@ The main difference is ttr doesn't depend on any editor and works right in the s
 $ brew install bazhenov/tap/ttr
 ```
 
-### Linux (.deb)
+### Linux
 
 ```console
-$ cur -OL https://github.com/bazhenov/ttr/releases/download/0.3.0/ttr-0.3.0-x86_64-unknown-linux-gnu.deb
-$ dpkg -i ttr-0.3.0-x86_64-unknown-linux-gnu.deb
+$ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/bazhenov/ttr/releases/latest/download/ttr-installer.sh | sh
 ```
 
 ### Building from sources
@@ -42,9 +41,9 @@ $ cargo install --git=https://github.com/bazhenov/ttr.git
 
 `ttr` looks for a `.ttr.yaml` file in following directories:
 
-* current working directory and parent directories till the home dir (like a git);
-* home directory;
-* config directory (`$XDG_CONFIG_HOME` or `.config/ttr` on Linux and `~/Library/Application Support/ttr` on macOS).
+- current working directory and parent directories till the home dir (like a git);
+- home directory;
+- config directory (`$XDG_CONFIG_HOME` or `.config/ttr` on Linux and `~/Library/Application Support/ttr` on macOS).
 
 Tasks from all files are merged together. Priority is given to task defined earlier.
 
@@ -52,26 +51,26 @@ Configuration example:
 
 ```yaml
 groups:
-- name: git
-  key: g
-  tasks:
-  - name: lazygit
+  - name: git
     key: g
-    cmd: lazygit
-  - name: git diff
-    key: d
-    cmd: git diff
-- name: cargo
-  key: c
-  tasks:
-  - name: test
-    key: t
-    cmd: cargo test
-    confirm: true # displays confirmation after command exited
-    clear: true # clears terminal before running command
-  - name: run
-    key: r
-    cmd: cargo run
+    tasks:
+      - name: lazygit
+        key: g
+        cmd: lazygit
+      - name: git diff
+        key: d
+        cmd: git diff
+  - name: cargo
+    key: c
+    tasks:
+      - name: test
+        key: t
+        cmd: cargo test
+        confirm: true # displays confirmation after command exited
+        clear: true # clears terminal before running command
+      - name: run
+        key: r
+        cmd: cargo run
 ```
 
 ## Integration with terminals
@@ -96,7 +95,7 @@ bind \ck 'echo; ttr; commandline -f repaint'
 
 ### bash
 
-Analog in bash would be following configuration in  `.bashrc`
+Analog in bash would be following configuration in `.bashrc`
 
 ```
 bind -x '"\C-K":"ttr"'
