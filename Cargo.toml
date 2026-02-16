@@ -9,7 +9,7 @@ description = "WhichKey-like Interactive terminal task runner"
 
 [dependencies]
 anyhow = "1.0.100"
-clap = {version = "4.5.53", features = ["derive"]}
+clap = {version = "4.5.58", features = ["derive"]}
 crossterm = "0.29.0"
 ctrlc = "3.5.1"
 dirs = "6.0.0"
